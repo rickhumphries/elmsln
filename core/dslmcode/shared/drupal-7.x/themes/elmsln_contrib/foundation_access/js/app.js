@@ -137,6 +137,17 @@
 
     }
   };
+
+  Drupal.behaviors.offcanvasSubmenuTabOpen = {
+    attach:function(context, settings) {
+      $('.left-off-canvas-menu').focusin(function() {
+        $(this).foundation('offcanvas', 'show', 'move-right');
+      });
+      $('.left-off-canvas-menu').focusout(function() {
+        $(this).foundation('offcanvas', 'hide', 'move-right');
+      });
+    }
+  };
   // attach events to the window resizing / scrolling
   $(document).ready(function(){
     $(window).on('resize', function() {
