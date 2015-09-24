@@ -65,7 +65,48 @@ function _cis_filter_process($text, $filter, $format, $langcode, $cache, $cache_
         }
       }
       $patterns[] = $regex;
-      $media[] = theme('cis_filter_render', array('settings' => $vars));
+      $prefix = 'cis_filter_render__';
+      $render = $prefix . $vars['settings']['render'];
+      $template = '';
+      if ($vars['settings']['rev'] == 1) {
+        $code = array_merge(array(
+          'render' => 'iframe',
+          'item_type' => 'id',
+          'entity_type' => 'node',
+          'entity_bundle' => NULL,
+          'entity_unique_field' => 'item',
+        ), $vars['settings']);
+        // spec requires tool and item be set
+        if (isset($code['tool'])) {
+          // @ignore druplart_conditional_assignment
+          if ($settings = _cis_connector_build_registry($code['tool'])) {
+            $instance = '/';
+            if (isset($settings['instance']) && $settings['instance']) {
+              $instance = base_path();
+              //test for non-subdomain installation
+              $test = explode('/', $instance);
+              if (count($test) == 4) {
+                $instance = '/' . $test[2] . '/';
+              }
+            }
+          }
+        }
+      }
+      // figure out template suggestion
+      if (isset($vars['settings']['template'])) {
+        $template = $render . '__' . $vars['settings']['template'];
+      }
+
+      $ary = array(
+        'settings' => array(
+          'code' => $code,
+          'instance' => $instance,
+          'settings' => $settings,
+          'content' => '',
+        ),
+        'theme_hook_suggestion' => $template,
+      );
+      $media[] = theme($render, $ary);
     }
     $text = preg_replace($patterns, $media, $text, 1);
   }
@@ -79,16 +120,69 @@ function cis_filter_theme() {
   return array(
     'cis_filter_render' => array(
       'variables' => array(
+        'code' => array(),
         'settings' => array(),
+        'instance' => '',
+        'content' => '',
       ),
+      'template' => 'templates/cis-filter-render',
+    ),
+    'cis_filter_render__media_video' => array(
+      'variables' => array(
+        'code' => array(),
+        'settings' => array(),
+        'instance' => '',
+        'content' => '',
+      ),
+      'template' => 'templates/cis-filter-render--media-video',
+    ),
+    'cis_filter_render__link' => array(
+      'variables' => array(
+        'code' => array(),
+        'settings' => array(),
+        'instance' => '',
+        'content' => '',
+      ),
+      'template' => 'templates/cis-filter-render--link',
     ),
   );
 }
 
 /**
+ * [cis_filter_preprocess_cis_filter_render__link description]
+ * @param  [type] &$vars [description]
+ * @return [type]        [description]
+ */
+function cis_filter_preprocess_cis_filter_render__media_video(&$vars) {
+  $settings = $vars['settings']['settings'];
+  $instance = $vars['settings']['instance'];
+  $code = $vars['settings']['code'];
+
+}
+
+/**
+ * [cis_filter_preprocess_cis_filter_render__link description]
+ * @param  [type] &$vars [description]
+ * @return [type]        [description]
+ */
+function cis_filter_preprocess_cis_filter_render__link(&$vars) {
+  $settings = $vars['settings']['settings'];
+  $instance = $vars['settings']['instance'];
+  $code = $vars['settings']['code'];
+  $link = _cis_connector_format_address($settings, $instance, 'front');
+  // link based request requires RESTful webservice
+  $url = $code['entity_type'] . '/' . $code['item'] . '.json';
+  // uses property to allow for rapid load of a complex resource
+  $url .= '?deep-load-refs=file';
+  // fallback in case there was nothing to query
+  $link .= $code['entity_type'] . '/' . $code['item'];
+  $vars['content'] = _cis_filter_link_render($url, $code, $link, $instance);
+}
+
+/**
  * Theme callback to render media.
  */
-function theme_cis_filter_render($vars) {
+function cis_filter_preprocess_cis_filter_render($vars) {
   // generate a unique call signature
   $static_call = __FUNCTION__ . implode('_', $vars['settings']) . $vars['theme_hook_original'];
   // statically cache future calls
@@ -119,17 +213,6 @@ function theme_cis_filter_render($vars) {
           }
           // select the render method
           switch ($code['render']) {
-            // display this item as a link to what we were trying to construct
-            case 'link':
-              $link = _cis_connector_format_address($settings, $instance, 'front');
-              // link based request requires RESTful webservice
-              $url = $code['entity_type'] . '/' . $code['item'] . '.json';
-              // uses property to allow for rapid load of a complex resource
-              $url .= '?deep-load-refs=file';
-              // fallback in case there was nothing to query
-              $link .= $code['entity_type'] . '/' . $code['item'];
-              $result = _cis_filter_link_render($url, $code, $link, $instance);
-            break;
             // generate an iframe to display the referenced material
             case 'iframe':
               $link = _cis_connector_format_address($settings, $instance, 'front');
@@ -318,6 +401,27 @@ function theme_cis_filter_render($vars) {
     }
   }
   return $result;
+}
+
+/**
+ * Helper function to build an object from a shortcode
+ * @param  array $code      shortcode converted to an array
+ * @param  string $instance string associated with the requesting space
+ * @return array            fully loaded, filtered object from a webservice
+ */
+function _cis_filter_filtered_request_object($code, $instance) {
+  // request the object via webservice
+  $response = _cis_connection_object($code['item'], $code['entity_type'], 'json', 'GET', NULL, $code['tool'], $instance);
+  // see if this text value is a complex one to filter
+  foreach($response as &$field) {
+    if (is_array($field)) {
+      $field = check_markup($field['value'], $field['format']);
+    }
+    else {
+      $field = filter_xss($field);
+    }
+  }
+  return $response;
 }
 
 /**
