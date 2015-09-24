@@ -359,8 +359,15 @@ else
   /etc/init.d/httpd restart
   /etc/init.d/mysqld restart
 fi
-# source one last time before hooking crontab into the root user call
+# source one last time before hooking crontab into the elmsln user
 source $HOME/.bashrc
+
+# create an elmsln user
+useradd elmsln
+usermod -a -G elmsln elmsln
+usermod -a -G $webgroup elmsln
+cat /dev/null > /etc/sudoers.d/elmsln
+
 if [[ -n "$crontab" ]]; then
   cat /var/www/elmsln/docs/crontab.txt >> $crontab
 fi

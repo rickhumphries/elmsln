@@ -1,9 +1,9 @@
 #START ELMSLN#
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/.composer/vendor/bin
-HOME=/root/
-00 05 * * * root drush @elmsln cron --y
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/home/elmsln/.composer/vendor/bin
+HOME=/home/elmsln/
+00 05 * * * elmsln drush @elmsln cron --y
 #ELMSLN drush-create-site activation for site request processing
-* * * * * root  /usr/local/bin/drush-create-site/drush-create-site >> /var/log/drush.log
+* * * * * elmsln  /usr/local/bin/drush-create-site/drush-create-site >> /var/log/drush.log
 #ELMSLN drush-command-job activation for command processing
-* * * * * root  /usr/local/bin/drush-command-job/drush-command-job >> /var/log/drush.log
+* * * * * elmsln  /usr/local/bin/drush-command-job/drush-command-job >> /var/log/drush.log
 #END ELMSLN#
