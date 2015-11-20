@@ -3,6 +3,8 @@
 ## Hands free install
 There are some handsfree install routines (copy and paste) that you can try. This is the preferred method of installing ELMS Learning Network as it'll get you up and running with the least steps possible.
 
+**Minimum System Requirements: 2GB RAM**
+
 ### CentOS 6.x / RHEL 6.x
 https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/centos/example-deploy
 ### AWS managed image
