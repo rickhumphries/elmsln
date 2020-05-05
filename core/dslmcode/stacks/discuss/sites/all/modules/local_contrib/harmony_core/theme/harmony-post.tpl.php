@@ -30,7 +30,14 @@ $links = render($content['links']);
       </span>
     </div>
     <?php endif; ?>
-    <div class="pull-right">
+  </div>
+  <div class="clearfix">
+    <div class="post-left post-user-profile text-center">
+      <a href="#" tabindex="-1"><?php print $username; ?></a>
+    </div>
+    <div class="post-content post-left-offset">
+      <div class="post-content-inner">
+        <div class="pull-right">
       <span class="post-created">
         <?php if ($link_created): ?>
         <a href="<?php print $thread_post_url; ?>" title="<?php print t('Permalink to this post'); ?>"><?php print $created; ?></a>
@@ -42,12 +49,6 @@ $links = render($content['links']);
        <span class="post-revisions"><?php print $revisions; ?></span>
       <?php endif; ?>
     </div>
-  </div>
-  <div class="clearfix">
-    <div class="post-left post-user-profile text-center">
-      <a href="#" tabindex="-1"><?php print $username; ?></a>
-    </div>
-    <div class="post-content post-left-offset">
       <?php print render($content); ?>
 
       <?php if ($links): ?>
@@ -55,6 +56,7 @@ $links = render($content['links']);
         <?php print $links; ?>
       </div>
       <?php endif; ?>
+      </div>
       <?php if ($view_mode != 'inline_reply'): ?>
       <div id="post-<?php print $post->post_id; ?>-replies" class="post-replies clearfix"></div>
     <?php endif; ?>
