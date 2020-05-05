@@ -5,6 +5,60 @@
  */
 
 /**
+ * Menu callback: confirm rebuilding of read time.
+ */
+function cis_helper_sync_rosters_confirm() {
+  return confirm_form(array(), t('Synchronize all rosters?'),
+                  '' , t('It will takea while but will happen in the background so you can keep working.'), t('Sync roster'), t('Cancel'));
+}
+
+/**
+ * Handler for wipe confirmation
+ *
+ * @see node_configure_rebuild_confirm()
+ */
+function cis_helper_sync_rosters_confirm_submit($form, &$form_state) {
+  _cis_helper_sync_network();
+  drupal_set_message(t('All rosters will be synchronized shortly!'), 'notification');
+  drupal_goto('<front>');
+}
+
+/**
+ * Menu callback: confirm rebuilding of read time.
+ */
+function cis_helper_sync_network_roster_confirm() {
+  $node = menu_get_object();
+  return confirm_form(array(), t('Synchronize rosters for @course?', array('@course' => $node->title)),
+                  'node/' . $node->nid, t('It will take a minute or two to complete but will happen in the background so you can keep working.'), t('Sync roster'), t('Cancel'));
+}
+
+/**
+ * Handler for wipe confirmation
+ *
+ * @see node_configure_rebuild_confirm()
+ */
+function cis_helper_sync_network_roster_confirm_submit($form, &$form_state) {
+  $node = menu_get_object();
+  // background post to ourselves which will figure out who needs to be told about this
+  // and where the data should go
+  $nonblock = array(
+    'method' => 'POST',
+    'api' => '1',
+    'bucket' => 'cis',
+    'path' => '/',
+    'data' => array(
+      'elmsln_module' => 'cis_helper',
+      'elmsln_callback' => 'populate_course_network',
+      'course' => $node->field_machine_name[LANGUAGE_NONE][0]['value'],
+      'staff' => _cis_helper_get_staff(),
+    ),
+  );
+  _elmsln_api_nonblocking_requests(array($nonblock));
+  drupal_set_message(t('@course rosters will be synchronized shortly!', array('@course' => $node->title)), 'notification');
+  drupal_goto(arg(0) . '/' . arg(1));
+}
+
+/**
  * Callback for setting up an offering for existing courses.
  */
 function cis_helper_add_offering_page($form, $form_state) {
@@ -114,6 +168,7 @@ function cis_helper_add_offering_page_submit($form, $form_state) {
   $state['values']['access_string'] = check_plain($form_state['values']['access_string']);
   $state['values']['course'] = check_plain($form_state['values']['courses']);
   $state['values']['campus'] = check_plain($form_state['values']['campus']);
+  $state['pass_through'] = TRUE;
   $state['triggering_element']['#parents'][0] = 'submit';
 
   // fake submit form
@@ -130,7 +185,7 @@ function cis_helper_add_offering_page_submit($form, $form_state) {
       '@year' => $form_state['values']['year'],
       '@campus' => $form_state['values']['campus'],
       );
-    drupal_set_message(t('Successfully created @course @semester @year @campus offering with access ID @string!', $vars), 'info');
+    drupal_set_message(t('Successfully created @course @semester @year @campus offering with access ID @string!', $vars), 'notification');
   }
 }
 
@@ -174,7 +229,7 @@ function cis_helper_quick_setup_access_id_page($form, $form_state) {
 }
 
 /**
- * Submit handler for cis_helper_offering_planning_page.
+ * Submit handler for LTI launch reroute.
  */
 function cis_helper_quick_setup_access_id_page_submit($form, $form_state) {
   // context_id is actually access_string
@@ -196,267 +251,6 @@ function cis_helper_quick_setup_access_id_page_submit($form, $form_state) {
 }
 
 /**
- * Callback for offering planning
- */
-function cis_helper_offering_planning_page($form, $form_state) {
-  // list of available semesters for this offering
-  $field = field_info_field('field_semester');
-  $form['semester'] = array(
-    '#required' => '1',
-    '#multiple' => '0',
-    '#key_type_toggled' => '1',
-    '#type' => 'select',
-    '#options' => $field['settings']['allowed_values'],
-    '#multiple_toggle' => '1',
-    '#title' => t('Semester'),
-  );
-  // academic year of this offering
-  $field = field_info_field('field_year');
-  $form['year'] = array(
-    '#required' => '1',
-    '#multiple' => '0',
-    '#key_type_toggled' => '1',
-    '#type' => 'select',
-    '#options' => $field['settings']['allowed_values'],
-    '#multiple_toggle' => '1',
-    '#title' => t('Year'),
-  );
-  // select the course desired
-  $form['courses'] = array(
-    '#required' => '1',
-    '#multiple' => '1',
-    '#key_type_toggled' => '1',
-    '#description' => t('The courses to establish offerings for'),
-    '#type' => 'checkboxes',
-    '#options' => _cis_connector_assemble_entity_list('node', 'course', 'nid', 'title', array('field_display_in_course_list' => 1)),
-    '#multiple_toggle' => '1',
-    '#theme' => 'cis_helper_checkbox_table',
-    '#title' => t('Course'),
-  );
-  // list of available campuses to generate sections for this offering
-  $field = field_info_field('field_campus');
-  $form['campuses'] = array(
-    '#required' => '0',
-    '#multiple' => '1',
-    '#key_type_toggled' => '1',
-    '#type' => 'checkboxes',
-    '#theme' => 'cis_helper_checkbox_table',
-    '#options' => $field['settings']['allowed_values'],
-    '#multiple_toggle' => '1',
-    '#title' => t('Campus'),
-  );
-  $form['actions']['#type'] = 'actions';
-  $form['actions']['submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Create planned offerings'),
-  );
-  return $form;
-}
-
-/**
- * Submit handler for cis_helper_offering_planning_page.
- */
-function cis_helper_offering_planning_page_submit($form, $form_state) {
-  $year = $form_state['values']['year'];
-  $semester = $form_state['values']['semester'];
-  $courses = entity_load('node', $form_state['values']['courses']);
-  foreach ($courses as $nid => $course) {
-    $offering = NULL;
-    $offerings = array();
-    $offering_refs = array();
-    // make sure that this course doesn't already have an offering for this semester/year
-    if (!empty($course->field_offerings)) {
-      foreach ($course->field_offerings[LANGUAGE_NONE] as $offering_ref) {
-        $offering_refs[] = $offering_ref['value'];
-      }
-      $query = new EntityFieldQuery;
-      $result = $query
-        // select all field collections
-        ->entityCondition('entity_type', 'field_collection_item')
-        // that are offerings
-        ->entityCondition('bundle', 'field_offerings')
-        // that have an internal id associated to the current course
-        ->propertyCondition('item_id', $offering_refs, 'IN')
-        // and semester of the one submitted
-        ->fieldCondition('field_semester', 'value', $semester, '=')
-        // and year of the one submitted
-        ->fieldCondition('field_year', 'value', $year, '=')
-        // load as user 1 to ignore access issues for current user
-        ->addMetaData('account', user_load(1))
-        ->execute();
-      // if we had results, set the offering
-      if (isset($result['field_collection_item'])) {
-        $item = array_keys($result['field_collection_item']);
-        $offerings = entity_load('field_collection_item', $item);
-        $offering = array_pop($offerings);
-      }
-    }
-    // create an offering if we didn't select one above
-    if (is_null($offering)) {
-      // now work on the offering
-      $offering = entity_create('field_collection_item', array('field_name' => 'field_offerings'));
-      // associate this offering to the course
-      $offering->setHostEntity('node', $course);
-      // set semester
-      $offering->field_semester[LANGUAGE_NONE][0]['value'] = $semester;
-      // set year
-      $offering->field_year[LANGUAGE_NONE][0]['value'] = $year;
-      // make sure it isn't archived
-      $offering->archived = 0;
-      drupal_set_message(t("Created @course offering for @sem @year", array('@course' => $course->title, '@sem' => $semester, '@year' => $year)), 'notice');
-    }
-    else {
-      drupal_set_message(t("@course had an offering listed for @sem @year so it was not created", array('@course' => $course->title, '@sem' => $semester, '@year' => $year)), 'warning');
-    }
-    // allow for auto section stub-population of sections for campuses
-    $campuses = array();
-    // convert from null to key values since drupal sends checkboxes oddly
-    foreach ($form_state['values']['campuses'] as $code) {
-      if ($code != '0' && !empty($code) && $code != '') {
-        $campuses[] = $code;
-      }
-    }
-    // if no campuses to build then save offering as a container
-    if (empty($campuses)) {
-      $offering->save();
-    }
-    else {
-      // build a section for each campus requested, looking for existing
-      foreach ($campuses as $key => $campus) {
-        $campus_match = NULL;
-        $sec_match = NULL;
-        // make sure that there's a campus code set
-        if ($campus != '') {
-          // check for existing references to this offering / campus combo
-          $section_refs = array();
-          if (isset($offering->field_sections)) {
-            foreach ($offering->field_sections[LANGUAGE_NONE] as $section_ref) {
-              $section_refs[] = $section_ref['value'];
-            }
-          }
-          $result = array();
-          // make sure we have references
-          if (!empty($section_refs)) {
-            $query = new EntityFieldQuery;
-            $result = $query
-              // select all field collections
-              ->entityCondition('entity_type', 'field_collection_item')
-              // that are offerings
-              ->entityCondition('bundle', 'field_sections')
-              // that have an internal id associated to the current course
-              ->propertyCondition('item_id', $section_refs, 'IN')
-              // and campus matches this one
-              ->fieldCondition('field_campus', 'value', $campus, '=')
-              // load as user 1 to ignore access issues for current user
-              ->addMetaData('account', user_load(1))
-              ->execute();
-          }
-          // if we had results, set the offering
-          if (isset($result['field_collection_item'])) {
-            drupal_set_message(t("@course had a section listed for campus @campus for @sem @year so it was not created", array('@course' => $course->title, '@campus' => $campus, '@sem' => $semester, '@year' => $year)), 'warning');
-          }
-          else {
-            // select all offerings for this course, looking for a past one
-            $tmprefs = array();
-            if (!empty($offering_refs)) {
-              $query = new EntityFieldQuery;
-              $query
-                // select all field collections
-                ->entityCondition('entity_type', 'field_collection_item')
-                // that are offerings
-                ->entityCondition('bundle', 'field_offerings')
-                // that have an internal id associated to the current course
-                ->propertyCondition('item_id', $offering_refs, 'IN')
-                // order by ID descending so most recent is picked
-                ->propertyOrderBy('item_id', 'DESC')
-                // limit range to 1 item
-                ->range(0, 1)
-                // load as user 1 to ignore access issues for current user
-                ->addMetaData('account', user_load(1));
-              // make sure it's not the current one being acted on
-              if (isset($offering->item_id) && !is_null($offering->item_id)) {
-                $query->propertyCondition('item_id', $offering->item_id, '<>');
-              }
-              $result = $query->execute();
-              $tmpoff = array();
-              // if we had results, set the offering
-              if (isset($result['field_collection_item'])) {
-                $item = array_keys($result['field_collection_item']);
-                $tmp = entity_load('field_collection_item', $item);
-                $tmpoff = array_pop($tmp);
-              }
-              // see if this found anything
-              // check for existing references to this offering / campus combo
-              if (isset($tmpoff->field_sections)) {
-                foreach ($tmpoff->field_sections[LANGUAGE_NONE] as $tmpref) {
-                  $tmprefs[] = $tmpref['value'];
-                }
-              }
-              // sort just to be safe
-              sort($tmprefs);
-              $result = array();
-              $sec_match = NULL;
-              $campus_match = NULL;
-              // make sure we have references
-              if (!empty($tmprefs)) {
-                $query = new EntityFieldQuery;
-                $result = $query
-                  // select all field collections
-                  ->entityCondition('entity_type', 'field_collection_item')
-                  // that are offerings
-                  ->entityCondition('bundle', 'field_sections')
-                  // that have an internal id associated to the current course
-                  ->propertyCondition('item_id', $tmprefs, 'IN')
-                  // load as user 1 to ignore access issues for current user
-                  ->addMetaData('account', user_load(1))
-                  ->execute();
-                // if we had results, look through them
-                if (isset($result['field_collection_item'])) {
-                  $item = array_keys($result['field_collection_item']);
-                  $past_sections = entity_load('field_collection_item', $item);
-                  foreach ($past_sections as $sec) {
-                    if ($sec->field_campus['und'][0]['value'] == $campus) {
-                      $campus_match = $sec;
-                    }
-                    else {
-                      $sec_match = $sec;
-                    }
-                  }
-                }
-              }
-            }
-            // create the new section container
-            $section = entity_create('field_collection_item', array('field_name' => 'field_sections'));
-            // associate this section to the offering
-            $section->setHostEntity('field_collection_item', $offering);
-            // set the campus code
-            $section->field_campus[LANGUAGE_NONE][0]['value'] = $campus;
-            // see if we found anything worth trying for additional field population
-            if (!is_null($campus_match) || !is_null($sec_match)) {
-              // give priority to a past campus code match
-              if (!is_null($campus_match)) {
-                $clone = replicate_clone_entity('field_collection_item', $campus_match);
-              }
-              else {
-                $clone = replicate_clone_entity('field_collection_item', $sec_match);
-              }
-              // dup data that's possibly useful
-              $section->field_welcome_page = $clone->field_welcome_page;
-              $section->field_contact_info = $clone->field_contact_info;
-              $section->field_resources = $clone->field_resources;
-              $section->field_services = $clone->field_services;
-            }
-            // save section
-            $section->save();
-            drupal_set_message(t("Created @course campus section @campus for @sem @year", array('@course' => $course->title, '@campus' => $campus, '@sem' => $semester, '@year' => $year)), 'notice');
-          }
-        }
-      }
-    }
-  }
-}
-
-/**
  * Callback for quick setup page to build a lot of elements at once.
  *
  * At the end this will setup a course, offering, section, and service instance
@@ -469,43 +263,60 @@ function cis_helper_quick_setup_page($form = array(), &$form_state) {
   $options = array('new' => t('New'));
   // build list of node entities from structured EFQ
   $options += _cis_connector_assemble_entity_list('node', 'course', 'field_machine_name', 'title');
+  // don't require these fields on a pass through
+  if (isset($form_state['pass_through'])) {
+    $required_new = FALSE;
+  }
+  else {
+    $required_new = TRUE;
+  }
   // select the course desired
   $form['course'] = array(
-    '#required' => '1',
+    '#required' => $required_new,
     '#multiple' => '0',
     '#key_type_toggled' => '1',
-    '#description' => t('The course that this is associated to'),
+    '#description' => t('A new course or select an existing to expand'),
     '#type' => 'select',
     '#options' => $options,
     '#multiple_toggle' => '1',
     '#default_value' => 'new',
     '#title' => t('Course'),
+    '#attributes' => array(
+      'class' => array(
+        's12', 'col'
+      )
+    ),
   );
   // container for settings related to a new course
   $form['new_course'] = array(
-    '#description' => t('Settings that only apply to new courses'),
     '#collapsed' => '0',
     '#type' => 'fieldset',
     '#collapsible' => '1',
-    '#title' => t('New Course settings'),
+    '#title' => t('Details'),
+    '#attributes' => array(
+      'class' => array(
+        's12', 'm6', 'col',
+      )
+    ),
   );
   // new course name
   $form['new_course']['new_name'] = array(
-    '#required' => '0',
-    '#description' => t('Name of the new course to create.'),
+    '#required' => $required_new,
+    '#description' => t('Short name for your course'),
     '#type' => 'textfield',
-    '#title' => t('Course name'),
+    '#placeholder' => t('Art010'),
+    '#title' => t('Name'),
   );
   // new course name
   $form['new_course']['new_title'] = array(
-    '#required' => '0',
-    '#description' => t('Title of the new course.'),
+    '#required' => $required_new,
     '#type' => 'textfield',
-    '#title' => t('Course title'),
+    '#title' => t('Description'),
+    '#placeholder' => t('Introduction to Visual Studies'),
   );
   // access level
   $form['new_course']['access'] = array(
-    '#required' => '1',
+    '#required' => $required_new,
     '#description' => t('How restrictive would you like access to be?'),
     '#multiple' => '0',
     '#key_type_toggled' => '1',
@@ -520,32 +331,56 @@ function cis_helper_quick_setup_page($form = array(), &$form_state) {
     '#multiple_toggle' => '1',
     '#title' => t('Method of access'),
   );
+  // details of the build
+  $form['details'] = array(
+    '#collapsed' => '0',
+    '#type' => 'fieldset',
+    '#collapsible' => '1',
+    '#title' => t('Structure'),
+    '#attributes' => array(
+      'class' => array(
+        's12', 'm6', 'col',
+      )
+    ),
+  );
+  $field_conditions = array();
+  // ensure only users with permission get this advanced option
+  if (!user_access('cis setup admin options')) {
+    $field_conditions = array('field_machine_name' => array('value', 'innovate', '<>'));
+  }
+  // list of services
+  $service_list = _cis_connector_assemble_entity_list('node', 'service', 'nid', 'title', $field_conditions, array(), array('property' => array(array('title', 'ASC'))));
+  $service_list2 = _cis_connector_assemble_entity_list('node', 'service', 'nid', 'field_distribution', $field_conditions, array(), array('property' => array(array('title', 'ASC'))));
+  $form['details']['services'] = array(
+    '#multiple' => TRUE,
+    '#required' => $required_new,
+    '#key_type_toggled' => '1',
+    '#description' => t("What services would you like to use in this course network?"),
+    '#type' => 'checkboxes',
+    '#pre_render' => array('_cis_helper_checkbox_icon'),
+    '#options' => $service_list,
+    '#cis_icon_map' => $service_list2,
+    '#multiple_toggle' => '1',
+    '#default_value' => array(),
+    '#title' => t('Course network'),
+  );
+  // display instructional outline starting point
   $options = _cis_helper_get_instructional_outlines();
   $options[variable_get('file_public_path', conf_path() . '/files') . '/cis_outline_import/'] = t('CIS Outline Import (on server)');
   // add purely administrative options as part of advanced migration
   if (user_access('cis setup admin options')) {
     $options['xml_manifest_import'] = t('Upload..');
   }
-  $form['details'] = array(
-    '#description' => t('What systems would you like to make up your course network?'),
-    '#collapsed' => '0',
-    '#type' => 'fieldset',
-    '#collapsible' => '1',
-    '#title' => t('Network structure'),
-  );
-  $form['optional'] = array(
-    '#description' => t('Additional settings for setting up logistics'),
-    '#collapsed' => '1',
-    '#type' => 'fieldset',
-    '#collapsible' => '1',
-    '#title' => t('Additional settings'),
-  );
+  // support for gitbook
+  if (module_exists('gitphp')) {
+    $options['git_book_import'] = t('Git outline import');
+  }
   $form['details']['instructional_outline'] = array(
     '#type' => 'select',
     '#options' => $options,
-    '#required' => FALSE,
-    '#title' => t('Instructional outline'),
-    '#description' => t('This helps in creating a default instructional flow for the course, this just helps provide a starting point.'),
+    '#required' => TRUE,
+    '#title' => t('Content outline'),
+    '#description' => t('This helps in creating a default flow for the course. It\'s just a starting point though!'),
     '#default_value' => drupal_get_path('module', 'cis_helper') . '/instructional_models/' . CIS_HELPER_DEFAULT_CONTENT_OUTLINE,
   );
   if (user_access('cis setup admin options')) {
@@ -566,17 +401,27 @@ function cis_helper_quick_setup_page($form = array(), &$form_state) {
       ),
     );
   }
-  // list of services
-  $service_list = _cis_connector_assemble_entity_list('node', 'service', 'nid', 'title');
-  $form['details']['services'] = array(
-    '#multiple' => TRUE,
-    '#required' => FALSE,
-    '#key_type_toggled' => '1',
-    '#description' => t("What services would you like to use in this course network?"),
-    '#type' => 'checkboxes',
-    '#options' => $service_list,
-    '#multiple_toggle' => '1',
-    '#title' => t('Course network'),
+  // add git_book field for import if it exists
+  if (module_exists('gitphp')) {
+    $form['details']['git_book_import'] = array(
+      '#title' => t('GIT repository'),
+      '#type' => 'textfield',
+      '#description' => t('Enter a .git repo URL'),
+      '#required' => '0',
+    );
+  }
+  // optional container
+  $form['optional'] = array(
+    '#description' => t('Additional settings for setting up logistics'),
+    '#collapsed' => '1',
+    '#type' => 'fieldset',
+    '#collapsible' => '1',
+    '#title' => t('Additional settings'),
+    '#attributes' => array(
+      'class' => array(
+        's12', 'm12', 'col'
+      )
+    ),
   );
   // section container
   $form['optional']['section'] = array(
@@ -661,10 +506,25 @@ function cis_helper_quick_setup_page($form = array(), &$form_state) {
       ),
     ),
   );
-  $form['actions']['#type'] = 'actions';
-  $form['actions']['submit'] = array(
+  $form['actions']['actions'] = array(
+    '#collapsed' => '0',
+    '#type' => 'actions',
+    '#collapsible' => '1',
+    '#attributes' => array(
+      'class' => array(
+        's12', 'm6'
+      )
+    ),
+  );
+
+  $form['actions']['actions']['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Create course'),
+    '#attributes' => array(
+      'class' => array(
+        's12', 'col',
+      ),
+    )
   );
   return $form;
 }
@@ -685,6 +545,9 @@ function cis_helper_quick_setup_page_submit($form, $form_state) {
     $xml_manifest_import = file_load($form_state['values']['xml_manifest_import']);
     // save file
     file_save($xml_manifest_import);
+  }
+  elseif (user_access('cis setup admin options') && $instructional_outline == 'git_book_import' && $form_state['values']['git_book_import'] != '') {
+    $repo = $form_state['values']['git_book_import'];
   }
   // load the services node id items into a list
   $services = entity_load('node', $form_state['values']['services']);
@@ -844,7 +707,7 @@ function cis_helper_quick_setup_page_submit($form, $form_state) {
         }
         // see if this found anything
         // check for existing references to this offering / campus combo
-        if (isset($tmpoff->field_sections)) {
+        if (isset($tmpoff->field_sections[LANGUAGE_NONE])) {
           foreach ($tmpoff->field_sections[LANGUAGE_NONE] as $tmpref) {
             $tmprefs[] = $tmpref['value'];
           }
@@ -902,7 +765,7 @@ function cis_helper_quick_setup_page_submit($form, $form_state) {
     $file_check = array('syllabus', 'welcome_letter');
     foreach ($file_check as $file_name) {
       // make sure the file came across
-      if ($form_state['values'][$file_name] != '' && $form_state['values'][$file_name]['fid'] != 0) {
+      if ($form_state['values'][$file_name] != '') {
         // load the file into an object
         $file = file_load($form_state['values'][$file_name]);
         // Change status to permanent so it isn't killed on cron clean up
@@ -960,189 +823,69 @@ function cis_helper_quick_setup_page_submit($form, $form_state) {
       if (user_access('cis setup admin options') && isset($xml_manifest_import->uri)) {
         $instance->field_service_data[LANGUAGE_NONE][0]['value'] = drupal_realpath($xml_manifest_import->uri);
       }
+      elseif (isset($repo)) {
+        $instance->field_service_data[LANGUAGE_NONE][0]['value'] = $repo;
+      }
       else {
         $instance->field_service_data[LANGUAGE_NONE][0]['value'] = getcwd() . '/' . $instructional_outline;
       }
       // this will create the service because of the hook_entity_insert used here
       node_save($instance);
-      // create a file based on service name
-      $filename = $course->field_machine_name[LANGUAGE_NONE][0]['value'] . '.' . $service->field_machine_name[LANGUAGE_NONE][0]['value'];
-      // bring along expected filename that points to the instance data
-      $instances_created[$service->field_machine_name[LANGUAGE_NONE][0]['value']] = array(
-        'filename' => $filename,
-        'instance' => $instance,
-        'course' => $course,
-        'service' => $service,
-      );
     }
   }
-  // invoke batch API if not from command line
-  if (!empty($instances_created) && !drupal_is_cli()) {
-    _cis_helper_batch_add_service_instances($instances_created);
-  }
-}
-
-/**
- * Batch process to check for creation script's status.
- */
-function _cis_helper_batch_add_service_instances($instances_created) {
-  $tmptitle = 'course';
-  // can't assume course space requested in this form
-  if (isset($instances_created[CIS_HELPER_COURSE_SERVICE])) {
-    $tmptitle = $instances_created[CIS_HELPER_COURSE_SERVICE]['course']->title;
-  }
-  // establish the base for the batch call array
-  $batch = array(
-    'finished' => '_cis_helper_batch_add_service_instances_finished',
-    'title' => t('Creating @course', array('@course' => $tmptitle)),
-    'init_message' => t('Waiting for server to start site request..'),
-    'progress_message' => t('Step @current out of @total.'),
-    'error_message' => t('Request has encountered an error.'),
-    'file' => drupal_get_path('module', 'cis_helper') . '/cis_helper.pages.inc',
+  // pin prick all
+  $requests = array(
+    array(
+      'method' => 'POST',
+      'api' => 1,
+      'data' => array(
+        'elmsln_module' => 'elmsln_api',
+        'elmsln_callback' => 'clear_cache_bin',
+        'bin' => 'cis_connector',
+        'cid' => 'elmsln:cis:field_collection_item',
+      ),
+    )
   );
-  // default redirect location in case courses isn't requested
-  $redirect = 'cis-quick-setup';
-  // add an operation per service instance requested
-  foreach ($instances_created as $instance) {
-    $filepath = variable_get('cis_job_path', CIS_HELPER_JOB_PATH) . '/' . $instance['filename'];
-    // mooc is the starting point distro for a course so account for that
-    if ($instance['service']->field_machine_name[LANGUAGE_NONE][0]['value'] == CIS_HELPER_COURSE_SERVICE) {
-      $redirect = $instance['service']->field_location[LANGUAGE_NONE][0]['url'] . '/' . $instance['course']->field_machine_name[LANGUAGE_NONE][0]['value'];
-      // capture so we can add this last
-      $mooc = array('_cis_helper_batch_add_service_instances_process', array($instance['instance'], $instance['course'], $instance['service'], $instance['filename'], $filepath));
-    }
-    else {
-      $batch['operations'][] = array('_cis_helper_batch_add_service_instances_process', array($instance['instance'], $instance['course'], $instance['service'], $instance['filename'], $filepath));
-    }
+  _elmsln_api_authority_request($requests, TRUE, array('cis'));
+  // issue against network
+  $requests = array(
+    array(
+      'elmsln_module' => 'elmsln_api',
+      'elmsln_callback' => 'clear_cache_bin',
+      'bin' => 'cis_connector',
+      'cid' => 'elmsln:cis:field_collection_item',
+    )
+  );
+  _elmsln_api_network_request($requests, '1', TRUE, '/' . $course->field_machine_name['und'][0]['value'] . '/');
+  // sync section system wide if set
+  if (isset($section)) {
+    // force session context to be course that's being created
+    // otherwise it won't return anything though these calls may go no where
+    $_SESSION['cis_course_context'] = $course->field_machine_name[LANGUAGE_NONE][0]['value'];
+    $properties = array(
+      'title' => $section->field_access_string['und'][0]['value'],
+      'section_id' => $section->field_access_string['und'][0]['value'],
+      'course' => $course->uuid,
+      'active' => _cis_helper_section_is_active($section),
+    );
+    _elmsln_api_section_sync($properties);
   }
-  // move course to the last service created if multiple invoked
-  // this makes the eventual redirect more logical
-  if (isset($mooc)) {
-    $batch['operations'][] = $mooc;
-  }
-  batch_set($batch);
-  batch_process($redirect);
-}
-
-/**
- * Batch Operation Callback to test if the step the job is running.
- */
-function _cis_helper_batch_add_service_instances_process($service_instance, $course, $service, $filename, $filepath, &$context) {
-  if (!isset($context['sandbox']['progress'])) {
-    $context['sandbox']['progress'] = 0;
-    $context['sandbox']['max'] = 120;
-  }
-  // see if the count down timer is here
-  if (isset($context['sandbox']['start_timer'])) {
-    $context['sandbox']['timer'] = $context['sandbox']['start_timer'] - time();
-  }
-  // look for the file, if the filename exists, it hasn't started yet
-  // we continue to maintain the waiting message
-  if (file_exists($filepath)) {
-    $context['message'] = t('Waiting for server to start site request..');
-  }
-  else {
-    // when the filename no longer exists, this means that it's been picked up
-    if (file_exists($filepath . '.progress')) {
-      $progfile = file_get_contents($filepath . '.progress');
-      $progfile = explode("\n", $progfile);
-      $step = array_shift($progfile);
-      if (count($progfile) > 1) {
-        $msg = implode("\n", $progfile);
-      }
-      // start the timer at 3 minutes
-      if (!isset($context['sandbox']['start_timer'])) {
-        $context['sandbox']['start_timer'] = strtotime('+2 minutes', time());
-        $context['sandbox']['timer'] = $context['sandbox']['start_timer'] - time();
-      }
-      switch ($step) {
-        case 1:
-          // scipt started
-          $context['message'] = t('Starting error checking..');
-        break;
-        case 2:
-          // right before drush si
-          $context['message'] = t('Installing `@service` for `@course`', array('@service' => $service->title, '@course' => $course->title));
-        break;
-        case 3:
-          // right after drush si
-          $context['message'] = t('`@service` Installation complete! Verifying install..', array('@service' => $service->title, '@course' => $course->title));
-        break;
-        case 4:
-          // after drush commands
-          $context['message'] = t('Install verification complete! Setting up file directories and permissions.');
-        break;
-        case 5:
-          // running through drush commands as part of the integration
-          if (empty($msg)) {
-            $context['message'] = t('Directory creation complete! Integrating with ELMSLN system and optimizing your new site.');
-          }
-          else {
-            $context['message'] = t('@msg', array('@msg' => $msg));
-          }
-        break;
-        case 6:
-          // done
-          if ($service->field_machine_name[LANGUAGE_NONE][0]['value'] == CIS_HELPER_COURSE_SERVICE) {
-            $context['message'] = t('`@service` created successfully! We are redirecting you to `@course` now!', array('@service' => $service->title, '@course' => $course->title));
-          }
-          else {
-            $context['message'] = t('`@service` created successfully!', array('@service' => $service->title));
-          }
-          $context['sandbox']['progress'] = $context['sandbox']['max'];
-        break;
-      }
-      // don't add time to wait for last step
-      if ($step != 6) {
-        // make sure that start timer has actually started to set timer
-        if (isset($context['sandbox']['start_timer'])) {
-          $context['sandbox']['progress'] = $context['sandbox']['max'] - ((int)(date('i', $context['sandbox']['timer']) * 60) + (int)date('s', $context['sandbox']['timer']));
-				}
-        // make sure we don't go below 0
-        if ($context['sandbox']['timer'] > 0) {
-          $time_msg = date('i:s', $context['sandbox']['timer']);
-        }
-        else {
-          $time_msg = t('Very soon..');
-        }
-        $context['message'] .= ' ' . t('Estimated time remaining: @time', array('@time' => $time_msg));
-      }
-      // switch progress to this step
-      $context['sandbox']['step'] = $step;
-    }
-  }
-	// account for timer running down before it's actually done
-	if ($context['sandbox']['progress'] == $context['sandbox']['max'] && $step != 6) {
-		$context['sandbox']['progress'] = $context['sandbox']['max'] - 1;
-	}
-  // account for ability for timer to be running but progress file go away
-  // if this happens at the exact right moment, the job is finished
-  // but will never actually show via the UI that this has happened.
-  if (file_exists($filepath . '.processed') && !file_exists($filepath . '.progress')) {
-    $context['sandbox']['progress'] = $context['sandbox']['max'];
-    $context['finished'] = 1;
-  }
-  // Inform the batch engine that we are not finished,
-  // and provide an estimation of the completion level we reached.
-  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
-    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  // allow other forms to ride off this one without forcing a redirect
+  if (!isset($form_state['pass_through'])) {
+    drupal_goto($course->field_machine_name[LANGUAGE_NONE][0]['value'] . '/service-instances');
   }
 }
 
+
 /**
- * Batch 'finished' callback.
+ * Helper function to render checkboxes with icon next to them
  */
-function _cis_helper_batch_add_service_instances_finished($success, $results, $operations) {
-  if (!$success) {
-    // An error occurred.
-    // $operations contains the operations that remained unprocessed.
-    $error_operation = reset($operations);
-    $message = t('An error occurred while processing %error_operation with arguments: @arguments', array('%error_operation' => $error_operation[0], '@arguments' => print_r($error_operation[1], TRUE)));
-    drupal_set_message($message, 'error');
+function _cis_helper_checkbox_icon($elements) {
+  foreach ($elements as $key => &$element) {
+    if (is_numeric($key) && $element['#type'] == 'checkbox') {
+      $icon = $elements['#cis_icon_map'][$key]['und'][0]['value'];
+      $element['#prefix'] .= '<lrn-icon icon="' . $icon . '" class="cis-checkbox-icon"></lrn-icon>';
+    }
   }
-  else {
-    // prevent message from printing as this should now be redirecting if it
-    // successfully created something
-    drupal_get_messages();
-  }
+  return $elements;
 }

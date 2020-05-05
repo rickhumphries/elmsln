@@ -8,82 +8,53 @@ function mooc_foundation_access_preprocess_page(&$variables) {
   if (module_exists('speedreader')) {
     $variables['speedreader'] = TRUE;
   }
-  // mespeak is enabled
-  if (module_exists('mespeak')) {
-    $variables['mespeak'] = TRUE;
-  }
-  // support for add child page shortcut
-  $node = menu_get_object();
-  if ($node && user_access('access printer-friendly version')) {
-    $variables['tabs_extras'][200][] = '<hr>';
-    $variables['tabs_extras'][200][] = l(t('Print'), 'book/export/html/' . arg(1));
+  // drop some tabs that don't seem to go away on their own
+  if (isset($variables['tabs']['#primary']) && !empty($variables['tabs']['#primary'])) {
+    foreach ($variables['tabs']['#primary'] as $key => $value) {
+      if (in_array($value['#link']['path'], array('node/%/display', 'node/%/outline', 'node/%/log'))) {
+        unset($variables['tabs']['#primary'][$key]);
+      }
+    }
+    // for now drop secondary entirely for nodes
+    if (arg(0) == 'node' && isset($variables['tabs']['#secondary'])) {
+      unset($variables['tabs']['#secondary']);
+    }
   }
   $child_type = variable_get('book_child_type', 'book');
+  $node = menu_get_object();
   if ($node && !empty($node->book) && (user_access('add content to books') || user_access('administer book outlines')) && node_access('create', $child_type) && $node->status == 1 && isset($node->book['depth']) && $node->book['depth'] < MENU_MAX_DEPTH) {
-    $variables['tabs_extras'][200][] = '<hr>';
-    $variables['tabs_extras'][200][] = l(t('Add child page'), 'node/add/' . str_replace('_', '-', $child_type), array('query' => array('parent' => $node->book['mlid'])));
+    $variables['tabs_extras'][200][] = l(t('Edit child outline'), 'node/' . $node->book['nid'] . '/outline/children');
+    $variables['tabs_extras'][200][] = l(t('Edit course outline'), 'admin/content/book/' . $node->book['bid']);
   }
-  if (user_access('access contextual links')) {
-    $variables['tabs_extras'][0][] = '<li class="cis_accessibility_check"></li>';
+  // remove the prefix that provides a link to the home page
+  // as MOOC is the thing that currently provides support directly for this
+  // and slightly overrides the behavior
+  $keys = array_keys($variables['page']['header']);
+  $keyname = array_shift($keys);
+  unset($variables['page']['header'][$keyname]['#prefix']);
+
+  // Remove title from a page when a gitbook markdown filter is present.
+  if(isset($variables['page']['content']['system_main']['nodes'])) {
+    foreach($variables['page']['content']['system_main']['nodes'] as $node) {
+      if(isset($node['body']['#object'])) {
+        if($node['body']['#object']->body['und'][0]['format'] == "git_book_markdown") {
+          $variables['title'] = "";
+        }
+      }
+    }
   }
 }
 
 /**
- * Implements menu_link__cis_service_connection_active_outline().
+ * Implements template_preprocess_node.
  */
-function mooc_foundation_access_menu_link__cis_service_connection_active_outline($variables) {
-  switch(theme_get_setting('mooc_foundation_access_outline_labeling')) {
-    case 'auto_both':
-      $word = theme_get_setting('mooc_foundation_access_outline_label');
-      $number = TRUE;
-    break;
-    case 'auto_num':
-      $word = FALSE;
-      $number = TRUE;
-    break;
-    case 'auto_text':
-      $word = theme_get_setting('mooc_foundation_access_outline_label');
-      $number = FALSE;
-    break;
-    case 'none':
-      $word = FALSE;
-      $number = FALSE;
-    break;
-    default :
-      $word = t('Lesson');
-      $number = TRUE;
-    break;
+function mooc_foundation_access_preprocess_node(&$variables) {
+  // Remove title from a page when a gitbook markdown filter is present.
+  if(isset($variables['body'][0]['format'])) {
+    if($variables['body'][0]['format'] == "git_book_markdown") {
+      $variables['title'] = "";
+    }
   }
-  return _foundation_access_menu_outline($variables, $word, $number);
-}
-
-/**
- * Implements menu_link__cis_service_connection_all_active_outline().
- */
-function mooc_foundation_access_menu_link__cis_service_connection_all_active_outline($variables) {
-  switch(theme_get_setting('mooc_foundation_access_outline_labeling')) {
-    case 'auto_both':
-      $word = theme_get_setting('mooc_foundation_access_outline_label');
-      $number = TRUE;
-    break;
-    case 'auto_num':
-      $word = FALSE;
-      $number = TRUE;
-    break;
-    case 'auto_text':
-      $word = theme_get_setting('mooc_foundation_access_outline_label');
-      $number = FALSE;
-    break;
-    case 'none':
-      $word = FALSE;
-      $number = FALSE;
-    break;
-    default :
-      $word = t('Lesson');
-      $number = TRUE;
-    break;
-  }
-  return _foundation_access_menu_outline($variables, $word, $number);
 }
 
 /**
@@ -91,4 +62,20 @@ function mooc_foundation_access_menu_link__cis_service_connection_all_active_out
  */
 function mooc_foundation_access_breadcrumb($variables) {
   // hide breadcrumbs
+}
+
+/**
+ * Implements menu_tree__menu_elmsln_add.
+ */
+function mooc_foundation_access_menu_tree__menu_elmsln_add($variables) {
+  $links = '';
+  // make sure nothing shows up if this is the new book
+  if (arg(1) != 'lrnapp-book') {
+    if (user_access('add item in context')) {
+      $links = _elmsln_core_in_context_list();
+      $links = implode("\n", $links);
+    }
+    return '<ul role="menu" aria-hidden="false" tabindex="-1" class="elmsln-add-menu-items">' . $links . $variables['tree'] . '</ul>';
+  }
+  return FALSE;
 }

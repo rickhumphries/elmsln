@@ -21,9 +21,10 @@ function cis_install() {
   // standard clean up
   _elmsln_installer_post_install_cleanup();
   // especially for now, once you login, this is what you want to do
-  variable_set('site_frontpage', 'cis-quick-setup');
-  // we don't need a help and syllabus link for most authority systems
+  variable_set('site_frontpage', 'apps/lrnapp-cis');
+  // we don't need these on authority systems
   variable_set('cis_help_page', '');
+  variable_set('cis_resource_page', '');
   variable_set('cis_syllabus_page', '');
   // need to set this absolutely last bc of all the default permissions in here
   module_enable(array('cis_default_permissions'));
@@ -38,4 +39,179 @@ function cis_update_7001(&$sandbox) {
   module_enable(array('cis_service_roles', 'role_export'));
   // need to set this absolutely last bc of all the default permissions in here
   module_enable(array('cis_default_permissions'));
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function cis_update_7002(&$sandbox) {
+  // set home page to courses now that we know what we're doing
+  variable_set('site_frontpage', 'courses');
+  // CIS needs to be handled this way til we kill off support for 1.x
+  features_revert_module('cis_types');
+  features_revert_module('cis_displays');
+  features_revert_module('cis_users');
+  features_revert_module('cis_ux');
+}
+
+/**
+ * Authority systems don't have resource, syllabus elements
+ * unless stated specifically by something post install.
+ */
+function cis_update_7003(&$sandbox) {
+  // we don't need these on authority systems
+  variable_set('cis_resource_page', '');
+  variable_set('cis_syllabus_page', '');
+}
+
+/**
+ * Better menu item placement
+ */
+function cis_update_7004(&$sandbox) {
+  // try and place menu items corectly
+  features_revert_module('cis_displays');
+  menu_cache_clear('navigation');
+  menu_cache_clear('menu-elmsln-navigation');
+  menu_cache_clear('menu-elmsln-add');
+  menu_cache_clear('menu-elmsln-settings');
+}
+
+/**
+ * AJAX refresh cis_displays for self refreshing listing of services as they build.
+ */
+function cis_update_7005(&$sandbox) {
+  // enable module then revert dis_displays
+  module_enable(array('views_autorefresh'));
+  features_revert_module('cis_displays');
+}
+
+/**
+ * Revert cis displays so we have the better courses page
+ */
+function cis_update_7006(&$sandbox) {
+  features_revert_module('cis_displays');
+  features_revert_module('cis_types');
+}
+
+/**
+ * Clean up the content type forms
+ */
+function cis_update_7007(&$sandbox) {
+  module_enable(array('ds_forms'));
+  features_revert_module('cis_ux');
+  features_revert_module('cis_types');
+}
+
+/**
+ * Clean up the content type forms and implement banner pervasively
+ */
+function cis_update_7008(&$sandbox) {
+  module_enable(array('filefield_paths'));
+  features_revert_module('cis_types');
+}
+
+/**
+ * User importing
+ */
+function cis_update_7009(&$sandbox) {
+  module_enable(array('cis_user'));
+}
+
+/**
+ * Competency engine
+ */
+function cis_update_7010(&$sandbox) {
+  module_enable(array('cis_competencies'));
+  features_revert_module('cis_displays');
+  features_revert_module('cis_types');
+  features_revert_module('cis_competencies');
+}
+
+/**
+ * Competency engine
+ */
+function cis_update_7011(&$sandbox) {
+  features_revert_module('cis_types');
+}
+
+/**
+ * Link locations
+ */
+function cis_update_7012(&$sandbox) {
+  features_revert_module('cis_ux');
+  features_revert_module('cis_displays');
+}
+
+/**
+ * Better permissions for displays and public listing
+ */
+function cis_update_7013(&$sandbox) {
+  features_revert_module('cis_competencies');
+  features_revert_module('cis_displays');
+}
+
+/**
+ * Dropped hard coded paths from inside CIS service definition
+ * plus now we can utilize our internal redirect methodology
+ */
+function cis_update_7014(&$sandbox) {
+  features_revert_module('cis_displays');
+  features_revert_module('cis_types');
+}
+
+/**
+ * Support for date ranges up to 2025. Such a good problem to have!
+ */
+function cis_update_7015(&$sandbox) {
+  features_revert_module('cis_displays');
+  features_revert_module('cis_types');
+  features_revert_module('cis_ux');
+}
+
+/**
+ * Support for flood control UI
+ */
+function cis_update_7016(&$sandbox) {
+  module_enable(array('flood_unblock', 'flood_control'));
+}
+
+/**
+ * Added SIS field.
+ */
+function cis_update_7017(&$sandbox) {
+  features_revert_module('cis_competencies');
+  features_revert_module('cis_types');
+}
+
+/**
+ * Color field added as well as updating other values
+ */
+function cis_update_7018(&$sandbox) {
+  // clean up from CIS 1.x rearing it's ugly head
+  field_delete_field('field_primary_color');
+  field_purge_batch(1000);
+  db_drop_table('field_data_field_primary_color');
+  db_drop_table('field_revision_field_primary_color');
+  // revert the types
+  features_revert_module('cis_types');
+  features_revert_module('cis_displays');
+  module_enable(array('webcomponents', 'webcomponents_app'));
+  // set to new default if they haven't modified
+  if (variable_get('site_frontpage', 'courses') == 'courses' || variable_get('site_frontpage', 'courses') == 'courses/list') {
+    variable_set('site_frontpage', 'apps/lrnapp-cis');
+  }
+}
+
+/**
+ * Drop the "courses" view!!
+ */
+function cis_update_7019(&$sandbox) {
+  features_revert_module('cis_displays');
+}
+
+/**
+ * Front page permissions
+ */
+function cis_update_7020(&$sandbox) {
+  features_revert_module('cis_ux');
 }

@@ -1,0 +1,199 @@
+<?php
+/**
+ * @file
+ * ELMS Compliance distribution integration.
+ */
+define('ELMSLN_ECD_DEFAULT_TYPE', 'media');
+
+/**
+ * Implements hook_node_insert().
+ */
+function elmsln_ecd_node_insert($node) {
+  // this will generate a new entry
+  //_elmsln_ecd_request($node, 'create');
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function elmsln_ecd_node_update($node) {
+  // this will generate if it was missed somehow but
+  // also will update just the parts needed if we decide
+  // it has to. The decision tree is why we don't use straight
+  // up REST to accomplish this task
+  //_elmsln_ecd_request($node, 'create');
+}
+
+/**
+ * Push an update compliance
+ * @param  object $node node being worked on
+ * @param  string $op   operation to commit
+ */
+function _elmsln_ecd_request($node, $op) {
+  $ignored_types = _elmsln_ecd_ignored_types();
+  $type = ELMSLN_ECD_DEFAULT_TYPE;
+  // allow other projects to modify from the media type
+  // content and link are valid options
+  drupal_alter('ecd_asset_type', $type, $node);
+  // ensure this isn't a type we don't want to call comply about
+  if (!in_array($node->type, $ignored_types)) {
+    // load associated course if there is one for this
+    if (isset($node->field_cis_course_ref[LANGUAGE_NONE][0]['target_id'])) {
+      // load the course node
+      $tmp = node_load($node->field_cis_course_ref[LANGUAGE_NONE][0]['target_id']);
+      // convert to machine name
+      $course = $tmp->field_course_machine_name[LANGUAGE_NONE][0]['value'];
+    }
+    else {
+      // fallback case for services as well as producing empty
+      // if no course would be established which is also not bad
+      $course = _cis_connector_course_context();
+    }
+    // ship this data over to compliance
+    $request = array(
+      'method' => 'POST',
+      'api' => '1',
+      'bucket' => 'ecd',
+      'path' => '/',
+      'data' => array(
+        'elmsln_module' => 'ecd_helper',
+        'elmsln_callback' => 'asset',
+        'title' => $node->title,
+        'course' => $course,
+        'url' => url('node/' . $node->nid, array('alias' => TRUE, 'absolute' => TRUE)),
+        'uuid' => $node->uuid,
+        'type' => $type,
+        'operation' => $op,
+      ),
+    );
+    _elmsln_api_request($request, TRUE);
+    // only deep scan content, media is highly specialized and doesn't need
+    // to be scanned deeply as it's already a singular asset
+    if ($type == 'content') {
+      // special case for content to deep search
+      if (!isset($node->content)) {
+        $view = node_view($node);
+        $html = render($view);
+      }
+      else {
+        $html = $node->content;
+      }
+      // pull tags out of the rendered node content
+      $tags = _elmsln_ecd_scan_for_tags($html, array('a', 'video', 'object', 'img', 'iframe'));
+      // loop through the tag responses found
+      foreach ($tags as $tag) {
+        $link = NULL;
+        // src would be on video, iframes, images, objects, etc
+        if (isset($tag['src']) && _cis_connector_validate_url($tag['src'])) {
+          $link = $tag['src'];
+        }
+        // links and internally included resources
+        elseif (isset($tag['href']) && _cis_connector_validate_url($tag['href'])) {
+          $link = $tag['href'];
+        }
+        // if we found a link we need to try shipping it off
+        if (!empty($link)) {
+          $title = '';
+          // try to assemble a title from title and/or alt text
+          if (isset($tag['title'])) {
+            $title = $tag['title'];
+          }
+          elseif (isset($tag['alt'])) {
+            $title = $tag['alt'];
+          }
+          // see if that pulled anything
+          if (empty($title)) {
+            $title = t('Linked content');
+          }
+          // produce the asset notification remotely of type link
+          // links are special in that the UUID is actually the full
+          // link itself. This ensures that links used multiple times
+          // are not showing up multiple times. We also don't wipe the
+          // verification settings for links as they will need checked
+          // on a different interval
+          $request = array(
+            'method' => 'POST',
+            'api' => '1',
+            'bucket' => 'ecd',
+            'path' => '/',
+            'data' => array(
+              'elmsln_module' => 'ecd_helper',
+              'elmsln_callback' => 'asset',
+              'title' => substr($title, 0, 255),
+              'course' => $course,
+              'url' => $link,
+              'uuid' => $link,
+              'type' => 'link',
+              'operation' => $op,
+            ),
+          );
+          _elmsln_api_request($request, TRUE);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Ignored types not to ship off to comply.
+ */
+function _elmsln_ecd_ignored_types() {
+  // known to ignore everywhere
+  $ignore = array('section', 'cis_course', 'course');
+  drupal_alter('ecd_ignored_types', $ignore);
+  return $ignore;
+}
+
+/**
+ * Scan for tags in html content.
+ * @param  string $html       html
+ * @param  array  $tag_names  array of tags to search for
+ * @return array              tags found
+ */
+function _elmsln_ecd_scan_for_tags($html, $tag_names) {
+  $tags = array();
+  // set up a new DOMDocument
+  $dom = new DOMDocument();
+  // use the @ symbol to supress invalid html warnings
+  @$dom->loadHTML($html);
+  // loop through the tags requested and pull together what
+  // exists in the content. This lets us pull out all links
+  // in one pass through.
+  foreach ($tag_names as $tag_name) {
+    $elements = $dom->getElementsByTagName($tag_name);
+    // loop through each tag
+    for ($i = 0; $i < $elements->length; $i++) {
+      $element = $elements->item($i);
+      $attr_length = $element->attributes->length;
+      // gather a list of attributes for this tag
+      $attributes = array();
+      foreach ($element->attributes as $key => $value) {
+        $attributes[$value->name] = $value->value;
+      }
+      $tags[] = $attributes;
+    }
+  }
+  return $tags;
+}
+
+/**
+ * Bulk send data about all the types that are not being
+ * told to be ignored by this system.
+ * @todo  wire this up to a UI / backend job so we can do audits on demand
+ */
+function _elmsln_ecd_bulk_send() {
+  $ignore = _elmsln_ecd_ignored_types();
+  $query = new EntityFieldQuery;
+  $query->entityCondition('entity_type', 'node');
+  $query->entityCondition('bundle', $ignore, 'NOT IN');
+  $query->propertyCondition('status', 1);
+  $result = $query->execute();
+  if (isset($result['node'])) {
+    $nids = array_keys($result['node']);
+    foreach ($nids as $nid) {
+      $node = node_load($nid);
+      _elmsln_ecd_request($node, 'create');
+    }
+    return count($nids);
+  }
+}

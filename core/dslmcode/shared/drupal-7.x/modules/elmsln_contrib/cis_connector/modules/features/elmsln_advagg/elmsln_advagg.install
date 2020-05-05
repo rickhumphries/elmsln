@@ -1,0 +1,64 @@
+<?php
+
+/**
+ * @file
+ * ELMSLN advagg install.
+ */
+
+ /**
+ * Increases the max bundles for css & js bundlers from 2 to 15
+ */
+function elmsln_advagg_update_7000() {
+  // better optimization over 2 bundles oddly enough
+  variable_set('advagg_bundler_max_css', 15);
+  variable_set('advagg_bundler_max_js', 15);
+  // can conflict with foundation / foundation_access
+  variable_set('advagg_cache_level', 3);
+  // gzip can cause issues if gzip libraries not available
+  variable_set('advagg_gzip', 0);
+}
+
+/**
+ * Updates cache level to 1 instead of 3. This is the normal
+ * setting that advagg has out of the box and we were trying
+ * to be more aggressive. This has proven to brick our sub-theme
+ * structure by leaving advagg with out of date css/js when doing
+ * major theme revision / upgrades; then requiring manual intervention.
+ */
+function elmsln_advagg_update_7001() {
+  variable_set('advagg_cache_level', 1);
+}
+
+/**
+ * Implements the preconnect and dns-prefetch settings
+ * which will shave an additional 200ms+ off each DOM process
+ * with no downside. Basically just primes the connections prior
+ * to making them later in the document.
+ */
+function elmsln_advagg_update_7002() {
+  features_revert_module('elmsln_advagg');
+}
+
+/**
+ * All but footer (previous default) causes issues
+ */
+function elmsln_advagg_update_7003() {
+  variable_set('advagg_mod_js_footer', 1);
+}
+
+/**
+ * Now that we have this new way of doing business
+ * aggregation is going to crush page load times!
+ */
+function elmsln_advagg_update_7004() {
+  variable_set('advagg_bundler_max_css', 1);
+  variable_set('advagg_bundler_max_js', 1);
+}
+
+/**
+ * Woo now we KNOW that these are faster then not faster.
+ */
+function elmsln_advagg_update_7005() {
+  variable_set('preprocess_css', '1');
+  variable_set('preprocess_js', '1');
+}

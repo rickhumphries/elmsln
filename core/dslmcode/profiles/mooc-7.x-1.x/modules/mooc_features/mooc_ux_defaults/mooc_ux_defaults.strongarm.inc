@@ -293,13 +293,7 @@ function mooc_ux_defaults_strongarm() {
       'change_type' => array(
         'unchecked' => TRUE,
       ),
-      'hidden_nodes' => array(
-        'unchecked' => TRUE,
-      ),
       'book_title_override' => array(
-        'unchecked' => TRUE,
-      ),
-      'book_copy' => array(
         'unchecked' => TRUE,
       ),
     ),
@@ -309,58 +303,295 @@ function mooc_ux_defaults_strongarm() {
   $strongarm = new stdClass();
   $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
   $strongarm->api_version = 1;
-  $strongarm->name = 'tipsy';
+  $strongarm->name = 'print_comments';
+  $strongarm->value = 0;
+  $export['print_comments'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_css';
+  $strongarm->value = '';
+  $export['print_css'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_footer_options';
+  $strongarm->value = '0';
+  $export['print_footer_options'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_footer_user';
+  $strongarm->value = '';
+  $export['print_footer_user'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_html_display_sys_urllist';
+  $strongarm->value = 1;
+  $export['print_html_display_sys_urllist'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_html_link_text';
+  $strongarm->value = 'Printer-friendly version';
+  $export['print_html_link_text'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_html_link_text_enabled';
+  $strongarm->value = 0;
+  $export['print_html_link_text_enabled'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_html_new_window';
+  $strongarm->value = 1;
+  $export['print_html_new_window'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_html_sendtoprinter';
+  $strongarm->value = 0;
+  $export['print_html_sendtoprinter'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_html_windowclose';
+  $strongarm->value = 1;
+  $export['print_html_windowclose'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_keep_theme_css';
+  $strongarm->value = 0;
+  $export['print_keep_theme_css'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_logo_options';
+  $strongarm->value = '0';
+  $export['print_logo_options'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_logo_upload';
+  $strongarm->value = '';
+  $export['print_logo_upload'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_logo_url';
+  $strongarm->value = '';
+  $export['print_logo_url'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_newwindow';
+  $strongarm->value = '1';
+  $export['print_newwindow'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_autoconfig';
+  $strongarm->value = 1;
+  $export['print_pdf_autoconfig'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_cache_enabled';
+  $strongarm->value = 1;
+  $export['print_pdf_cache_enabled'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_cache_lifetime';
+  $strongarm->value = '604800';
+  $export['print_pdf_cache_lifetime'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_content_disposition';
+  $strongarm->value = '2';
+  $export['print_pdf_content_disposition'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_display_sys_urllist';
+  $strongarm->value = 1;
+  $export['print_pdf_display_sys_urllist'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_filename';
+  $strongarm->value = '[site:name] - [node:title] - [node:changed:custom:Y-m-d]';
+  $export['print_pdf_filename'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_images_via_file';
+  $strongarm->value = 0;
+  $export['print_pdf_images_via_file'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_link_text';
+  $strongarm->value = 'PDF version';
+  $export['print_pdf_link_text'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_link_text_enabled';
+  $strongarm->value = 0;
+  $export['print_pdf_link_text_enabled'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_page_orientation';
+  $strongarm->value = 'portrait';
+  $export['print_pdf_page_orientation'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_paper_size';
+  $strongarm->value = 'A4';
+  $export['print_pdf_paper_size'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_pdf_pdf_tool';
+  $strongarm->value = 'print_pdf_dompdf|sites/all/libraries/dompdf/dompdf_config.inc.php';
+  $export['print_pdf_pdf_tool'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_robots_noarchive';
+  $strongarm->value = 0;
+  $export['print_robots_noarchive'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_robots_nofollow';
+  $strongarm->value = 1;
+  $export['print_robots_nofollow'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_robots_noindex';
+  $strongarm->value = 1;
+  $export['print_robots_noindex'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_sourceurl_date';
+  $strongarm->value = 1;
+  $export['print_sourceurl_date'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_sourceurl_enabled';
+  $strongarm->value = 1;
+  $export['print_sourceurl_enabled'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_sourceurl_forcenode';
+  $strongarm->value = 1;
+  $export['print_sourceurl_forcenode'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_urls';
+  $strongarm->value = 1;
+  $export['print_urls'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'print_urls_anchors';
+  $strongarm->value = 1;
+  $export['print_urls_anchors'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'simplify_blocks_global';
   $strongarm->value = array(
-    'drupal_forms' => array(
-      'forms' => 0,
-      'options' => array(
-        'fade' => 1,
-        'gravity' => 'autoWE',
-        'delayIn' => '0',
-        'delayOut' => '0',
-        'trigger' => 'focus',
-        'opacity' => '0.8',
-        'offset' => '0',
-      ),
-    ),
-    'custom_selectors' => array(
-      0 => array(
-        'selector' => '.tipsy',
-        'options' => array(
-          'fade' => 1,
-          'gravity' => 'w',
-          'trigger' => 'hover',
-          'delayIn' => '0',
-          'delayOut' => '0',
-          'opacity' => '0.8',
-          'offset' => '0',
-          'html' => 0,
-          'tooltip_content' => array(
-            'source' => 'attribute',
-            'selector' => 'title',
-          ),
-        ),
-      ),
-      1 => array(
-        'selector' => '.cis_token_dynamic_value',
-        'options' => array(
-          'fade' => 1,
-          'gravity' => 'autoNS',
-          'trigger' => 'hover',
-          'delayIn' => '0',
-          'delayOut' => '0',
-          'opacity' => '1',
-          'offset' => '5',
-          'html' => 1,
-          'tooltip_content' => array(
-            'source' => 'attribute',
-            'selector' => 'data-cis-token',
-          ),
-        ),
-      ),
-    ),
+    0 => 'format',
   );
-  $export['tipsy'] = $strongarm;
+  $export['simplify_blocks_global'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'simplify_nodes_global';
+  $strongarm->value = array(
+    0 => 'author',
+    1 => 'options',
+    2 => 'revision',
+    3 => 'menu',
+  );
+  $export['simplify_nodes_global'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'simplify_user1';
+  $strongarm->value = 0;
+  $export['simplify_user1'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'simplify_users_global';
+  $strongarm->value = array(
+    0 => 'format',
+  );
+  $export['simplify_users_global'] = $strongarm;
+
+  $strongarm = new stdClass();
+  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
+  $strongarm->api_version = 1;
+  $strongarm->name = 'tincanapi_content_types';
+  $strongarm->value = array(
+    'mooc_container' => 0,
+    'page' => 0,
+    'section' => 0,
+  );
+  $export['tincanapi_content_types'] = $strongarm;
 
   return $export;
 }

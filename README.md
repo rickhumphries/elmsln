@@ -1,60 +1,57 @@
-![ELMSLN](https://raw.githubusercontent.com/michael-collins/elmsln-logos/master/png-lowres-solid/lowres_square-color.png "ELMS Learning Network")
+![ELMSLN](https://raw.githubusercontent.com/elmsln/elmsln/master/docs/assets/snowflake-with-text.png "ELMS Learning Network")
 
 ELMSLN
 ==============
-
 ELMS Learning Network (ELMSLN) is an open source educational technology platform for building and sustaining innovation in course technologies. It accomplishes this by taking a Suite of Tools approach to learning design, allowing several systems to make up the different aspects of a course learning environment.  Each course effectively forms a network of technologies (hence the name) which can then be better tailored to each individual course's needs.
 
-Learn more about ELMSLN @ [elmsln.org](http://elmsln.org/)
+Learn more about ELMSLN @ [elmsln.org](https://www.elmsln.org/)
 
-Version | PHP | Includes | Code Status 
-------------- | ------  | --- | -------------------------- | -----------
-[master](https://travis-ci.org/elmsln/elmsln)  | 5.3.0+ | Drupal 7.x, Piwik 2.x | [![Build Status](https://travis-ci.org/elmsln/elmsln.svg?branch=master)](https://travis-ci.org/elmsln/elmsln)
 
-[![Join the chat at https://gitter.im/elmsln/elmsln](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/elmsln/elmsln?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+| Version | PHP | Includes | Status |
+| ------- | --- | -------- | ------ |
+[1.0.4](https://github.com/elmsln/elmsln/archive/1.0.4.zip)  | 7.2+ | LitElement 2.x.x, Drupal 7.x, HAXcms 1.x.x | [![Build Status](https://travis-ci.org/elmsln/elmsln.svg?branch=master)](https://travis-ci.org/elmsln/elmsln)
 
-[Read the Docs](http://docs.elmsln.org/)
+Contributing
+==============
+You can learn more about contributing to ELMS:LN in our [CONTRIBUTING.md](CONTRIBUTING.md) guide. Vagrant is the fastest way to get up and running quickly. See the [Vagrant installation documentation](https://btopro.gitbooks.io/elmsln-documentation/content/developer-guide/vagrant-setup.html) on how to get up and running now! elmsln.org also has some sponsored demos of the technology but the real deal is always best!
+
+### Ubuntu notice
+Until update channels are updated to 2.2.4 please use this to get Vagrant working in Ubuntu 18+
+```
+wget -c https://releases.hashicorp.com/vagrant/2.2.4/vagrant_2.2.4_x86_64.deb
+sudo dpkg -i vagrant_2.2.4_x86_64.deb
+```
 
 Issues
 ==============
 If you notice an issue or have a question please file it in our [issue queue](https://github.com/elmsln/elmsln/issues).
 
-Styleguide
+Documentation
 ==============
-View the living [ELMSLN UI Styleguide](https://cdn.rawgit.com/elmsln/elmsln/master/core/dslmcode/shared/drupal-7.x/themes/elmsln_contrib/foundation_access/styleguide/index.html)
+See the Docs for questions and documentation either on our [docs site](https://btopro.gitbooks.io/elmsln-documentation/content/) or [API site](http://api.elmsln.org).
 
-To make it even easier to contribute design elements to ELMSLN we have created a starting point on [codepen.io](http://codepen.io/heyMP/pen/KdyKgK). To add your own components, fork the [ELMSLN Component Starter](http://codepen.io/heyMP/pen/KdyKgK) pen, make your new componenet directly in codepen, [create a new issue](https://github.com/elmsln/elmsln/issues/new) that points to your new pen and we'll get that into our styleguide.
-
-FAQ
+Vision and Governance
 ==============
-See the [wiki](https://github.com/elmsln/elmsln/wiki) for more questions / answers and documentation. If you are developing for ELMSLN there's also [extensive documentation on the API site](http://api.elmsln.org).
+See https://github.com/elmsln/elmsln/blob/master/GOVERNANCE.md for our ELMS:LN Vision and Governance statement.
 
-###Q. How can I get more involved?
+Code of Conduct
+==============
+See https://github.com/elmsln/elmsln/blob/master/CONFLICT_RESOLUTION.md for our Conflict Resolution guide.
+See https://github.com/elmsln/elmsln/blob/master/CODE_OF_CONDUCT.md for our ELMS:LN code of conduct.
+
+How can I get more involved?
+==============
 There are many ways you can get involved in helping build ELMSLN; not all of which are technical in nature. The easiest way is to click the issues button in this repository. Submit feedback, help, questions, pedagogy, ideas, fan-art anything that helps us further our mission! All help and outreach is welcome and responded to.
 
-If you'd like to try out ELMSLN for yourself, clone this repo and issue `vagrant up`. There's an included Vagrantfile which sets up a Virtual Machine on your computer to try out ELMSLN locally. For detailed directions on how to do this if you've never run vagrant before, see the [ELMSLN Vagrant instructions](https://github.com/elmsln/elmsln/wiki/Vagrant:-Step-by-Step-setup).
-
-If you are looking to join active project team development, [ELMSLN Developer](http://github.com/elmsln/elmsln-developer) is the place for you. This structures your desktop with a repo that helps put things in place to manage multiple elmsln deployments and keep things sane. It's what the project's founders use to develop the project and keep multiple deployments in check (along with robots, obviously).
-
-Test, ask, jump in on the issue queues on github, drupal.org, twitter, email, phone, drupalcamps, edtech events, our offices, or anywhere else that you can find pieces that will help build upon this work. We are here to make the future awesome together.
-
-###Q. When will there be a stable release?
-As soon as the blockers below are resolved (basically just time). If it helps you sleep at night, we've run this in production and have been actively building off of this framework since May 2013.
-
-Sep 23, 2015 - We've got all the tools we planned on having in an initial release in the package. All initial UX items have been handled and stabilized as we're running it in production. The remaining issues have to do with infrastructure items we'd rather not have to provide upgrade paths for after creation.
-
-You can see the release blockers here: https://github.com/elmsln/elmsln/milestones/Release%20blocker
-
-###Q. How awesome is it to try and solve the edtech spaces biggest problem every day you walk into work?
-We are here to change the world
+Test, ask, jump in on the issue queues on github, drupal.org, twitter, email, phone, meet ups, drupalcamps, edtech events, our offices, coffee shops, or anywhere else that you can find pieces that will help build upon this work. We are here to make the future awesome together.
 
 LICENSE
-=======
-ELMSLN is a collection of many, many projects, all individually licensed, all open source. The myiad of License files is why this section is added to avoid confusion.
+==============
+ELMSLN is a collection of many, many projects, all individually licensed, all open source. The myriad of License files is why this section is added to avoid confusion. If you have a licensing question or concern please raise it in the issue queue.
 
-* ELMSLN code on github (and not referenced or pulled in from other sources) is GPLv3.
-* ELMS contributed modules from drupal.org are GPLv2 due to licensing requirements of the drupal.org community.
-* Drupal and Drupal contributed modules and themes are GPLv2 due to licensing requirements of the drupal.org community.
-* Piwik is GPLv3 via it's original repo (https://github.com/piwik/piwik)
-* CKEditor 4.x is GPLv3
-* Other included libraries are their respective LICENSE.txt files included local to those pieces of code
+- The ELMS:LN top level repository is GPLv3, though most of the underlying code pulled in is not GPLv3. V3 enabled the greatest level of compatibility with our downstream repositories
+- Drupal core and contributed modules / themes are GPLv2 due to licensing requirements of the drupal.org community.
+- GravCMS is MIT licensed
+- Polymer core is BSD 3 clause
+- The majority of included Webcomponents (especially those from the [LRNWebComponents](https://github.com/LRNWebComponents) repos) are Apache 2.0
+- For other included libraries see their respective LICENSE.txt / LICENSE.md file included local to those projects and libraries.

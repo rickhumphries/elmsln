@@ -16,9 +16,10 @@ function mooc_install() {
   _elmsln_installer_admin_role();
   // standard clean up
   _elmsln_installer_post_install_cleanup();
-
   // Allow visitor account creation with administrative approval.
   variable_set('user_register', USER_REGISTER_VISITORS_ADMINISTRATIVE_APPROVAL);
+  // set home page to the table of contents
+  variable_set('site_frontpage', 'mooc/book-toc');
   // drop the "book" content type as its confusing
   node_type_delete('book');
   // create basic content to drive system
@@ -28,7 +29,7 @@ function mooc_install() {
     _mooc_default_content('section', $root->nid);
   }
   else {
-    // if this is created via drush we don't need default contnet
+    // if this is created via drush we don't need default content
     // this provides usability to those testing it out
     // without interfering with more complex setups
     // we also make the assumption that node 2 will be
@@ -59,7 +60,7 @@ function _mooc_default_content($type, $bid = NULL) {
     case 'section':
       $node->title = t('Master Section');
       // make up a random section id to make things happy but fake
-      $node->field_section_id[LANGUAGE_NONE][0]['value'] = 'master_' . rand(1000, 5000);
+      $node->field_section_id[LANGUAGE_NONE][0]['value'] = 'master';
       // mark this as inactive so it can sync with systems
       $node->field_cis_active[LANGUAGE_NONE][0]['value'] = 0;
       $node->field_instructional_outlines[LANGUAGE_NONE][0]['target_id'] = $bid;
@@ -70,4 +71,265 @@ function _mooc_default_content($type, $bid = NULL) {
     node_save($node);
   }
   return $node;
+}
+
+/**
+ * Implements hook_update_N().
+ * Enable og_access so instructors / TAs can only see the sections
+ * that they are part of. All other tools already did this so this is specific
+ * to the MOOC platform requiring this enhancement.
+ */
+function mooc_update_7001(&$sandbox) {
+  // enable og_access
+  module_enable(array('og_access'));
+  // rebuild permissions since there were groups before this
+  node_access_rebuild();
+}
+
+/**
+ * Implements hook_update_N().
+ * Some blocks shifted from cis_service_connection over to mooc_helper
+ * which means that the related contexts need to be rebuild in cache
+ * or they'll just be empty.
+ */
+function mooc_update_7002(&$sandbox) {
+  context_invalidate_cache();
+}
+
+/**
+ * Revert mooc page so it can support input formats other then just
+ * textbook also enable the tokens module.
+ */
+function mooc_update_7003(&$sandbox) {
+  features_revert_module('mooc_page');
+  module_enable(array('cis_tokens'));
+}
+
+/**
+ * Enable talking to the comply system but don't bulk send as
+ * people will need to do that manually if they desire.
+ */
+function mooc_update_7004(&$sandbox) {
+  module_enable(array('elmsln_ecd'));
+}
+
+/**
+ * Enable the service module so we can do things specific
+ * to services in the future.
+ */
+function mooc_update_7005(&$sandbox) {
+  module_enable(array('cis_course_service'));
+}
+
+/**
+ * Improved authoring experince with content editing.
+ */
+function mooc_update_7006(&$sandbox) {
+  features_revert_module('mooc_page');
+  features_revert_module('mooc_content_theming');
+}
+
+/**
+ * Improved authoring experince with content editing.
+ */
+function mooc_update_7007(&$sandbox) {
+  features_revert_module('mooc_page');
+}
+
+/**
+ * Improvements to nav_block.
+ */
+function mooc_update_7008(&$sandbox) {
+  features_revert_module('mooc_page');
+  features_revert_module('mooc_nav_block');
+}
+
+/**
+ * PDF printing capabilities via DOMpdf library print module.
+ */
+function mooc_update_7009(&$sandbox) {
+  features_revert_module('mooc_ux_defaults');
+  features_revert_module('mooc_perms');
+}
+
+/**
+ * Tincan API integration support.
+ */
+function mooc_update_7010(&$sandbox) {
+  module_enable(array('elmsln_lrs'));
+}
+
+/**
+ * Tincan settings specific to MOOC out of the box.
+ */
+function mooc_update_7011(&$sandbox) {
+  features_revert_module('mooc_ux_defaults');
+}
+
+/**
+ * Block placement for non-node pages as well now so outline is pervasive.
+ */
+function mooc_update_7012(&$sandbox) {
+  features_revert_module('mooc_ux_defaults');
+}
+
+/**
+ * Make text area less ridiculously big.
+ */
+function mooc_update_7013(&$sandbox) {
+  features_revert_module('mooc_page');
+  features_revert_module('mooc_content_theming');
+}
+
+/**
+ * Clean up fields that don't need to exist.
+ */
+function mooc_update_7014(&$sandbox) {
+  field_delete_field('field_mooc_nav_style');
+  field_delete_field('field_mooc_nav_display');
+  field_delete_field('field_mooc_nav_type');
+  // actually deletes the fields
+  field_purge_batch(1000);
+  field_purge_batch(1000);
+}
+
+/**
+ * Prepare for the new world without the UI implemented... yet.
+ */
+function mooc_update_7015(&$sandbox) {
+  features_revert_module('mooc_cis_ux');
+  features_revert_module('mooc_content_theming');
+  features_revert_module('mooc_ux_defaults');
+  features_revert_module('mooc_theme_foundation');
+  // enable the modules to make it happen
+  module_enable(array('webcomponents_app', 'webcomponents_app_context', 'book_player'));
+}
+
+/**
+ * Clean up more cruft we are dropping
+ */
+function mooc_update_7016(&$sandbox) {
+  // wipe modules we're no longer requiring for anything
+  $modules = array(
+    'mooc_theme_foundation',
+    'mooc_textbook_nrhi',
+    'nodereference_highlight',
+  );
+  db_delete('system')
+    ->condition('name', $modules, 'IN')
+    ->condition('type', 'module')
+    ->execute();
+}
+
+/**
+ * Correct permissions for book_player
+ */
+function mooc_update_7017(&$standbox) {
+  features_revert_module('book_player');
+}
+
+/**
+ * Correct issues with context / block placement.
+ */
+function mooc_update_7018(&$standbox) {
+  features_revert_module('mooc_cis_ux');
+  features_revert_module('mooc_ux_defaults');
+  module_disable(array('book_title_override'));
+}
+
+/**
+ * Drop read time, it's too aggressive and front end can do this
+ */
+function mooc_update_7019(&$standbox) {
+  features_revert_module('mooc_cis_ux');
+  features_revert_module('mooc_ux_defaults');
+  module_disable(array('read_time','read_time_media','read_time_book',));
+}
+
+/**
+ * HAX here to start playing
+ */
+function mooc_update_7020(&$sandbox) {
+  // enable the modules to make it happen
+  module_enable(array('hax', 'mooc_hax'));
+}
+
+/**
+ * Enable HAX for real dealz!!
+ */
+function mooc_update_7021(&$sandbox) {
+  // enable the modules to make it happen
+  module_enable(array('webcomponents_cmstags'));
+  features_revert_module('mooc_hax');
+  features_revert_module('mooc_textbook');
+}
+
+/**
+ * Forcibly set this to enabled in input filter
+ */
+function mooc_update_7022(&$sandbox) {
+
+}
+
+/**
+ * Ensure this value is in the DB since it's hard to know
+ * ahead of time
+ */
+function mooc_update_7023(&$sandbox) {
+  // test to see if this is already set
+  $result = db_select('filter', 'f')
+    ->fields('f')
+    ->condition('format', 'textbook_editor', '=')
+    ->condition('module', 'webcomponents_cmstags', '=')
+    ->condition('name', 'webcomponents_cmstags', '=')
+    ->execute()
+    ->fetchAssoc();
+    // if we have an array, force an update to enable it
+    if (is_array($result)) {
+      db_update('filter')
+      ->fields(array(
+        'status' => 1,
+        'weight' => -50,
+      ))
+      ->condition('format', 'textbook_editor', '=')
+      ->condition('module', 'webcomponents_cmstags', '=')
+      ->condition('name', 'webcomponents_cmstags', '=')
+      ->execute();
+    }
+    else {
+      // we didn't have an array, create a new entry
+      $filter = db_insert('filter')
+      ->fields(array(
+        'format' => 'textbook_editor',
+        'module' => 'webcomponents_cmstags',
+        'name' => 'webcomponents_cmstags',
+        'weight' => -50,
+        'status' => 1,
+        'settings' => 'a:0:{}'
+      ))
+      ->execute();
+    }
+  // clear cache in order to ensure input filter is rebuild
+  cache_clear_all('filter_', 'cache', TRUE);
+}
+
+/**
+ * Drop accessibility modular set as HAX handles much of what this could have done poorly
+ */
+function mooc_update_7024(&$sandbox) {
+  module_disable(array("autosave", "mooc_autosave","speedreader", "accessibility", "accessibility_content", "accessibility_wysiwyg"));
+  features_revert_module('mooc_perms');
+}
+
+/**
+ * Get things up to speed with fixing input filters
+ */
+function mooc_update_7025(&$sandbox) {
+  features_revert_module('mooc_hax', 'mooc_textbook', 'mooc_ux_defaults');
+}
+/**
+ * HAX to everyone
+ */
+function mooc_update_7026(&$sandbox) {
+  features_revert_module('mooc_hax');
 }

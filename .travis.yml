@@ -1,29 +1,28 @@
 language: php
 
 php:
-  - 5.5
-
-matrix:
-  env:
-    global:
-      - ES_VER=1.0.1
-      - ES_MAPPER_ATTACHMENTS_VER=2.0.0.RC1
-      - ES_TRANSPORT_THRIFT_VER=2.0.0.RC1
-      - ES_GEOCLUSTER_FACET_VER=0.0.10
-      - ES_WAIT_ON_MAPPING_CHANGE=true
-      - DATABASE='drupal'
-      - DB_USERNAME='root'
-      - DB_ENCODE='utf8'
-    matrix:
-      - DRUPAL_3RD_PARTY='composer_manager'
-      - DRUPAL_3RD_PARTY='libraries'
-
-mysql:
-  database: $DATABASE
-  username: $DB_USERNAME
-  encoding: $DB_ENCODE
+  - 7.2
+dist: bionic
+os:
+  - linux
+addons:
+  mariadb: '10.1'
+env:
+  global:
+    - ES_VER=1.0.1
+    - ES_MAPPER_ATTACHMENTS_VER=2.0.0.RC1
+    - ES_TRANSPORT_THRIFT_VER=2.0.0.RC1
+    - ES_GEOCLUSTER_FACET_VER=0.0.10
+    - ES_WAIT_ON_MAPPING_CHANGE=true
+    - DATABASE='drupal'
+    - DB_USERNAME='root'
+    - DB_ENCODE='utf8'
+    - DRUPAL_3RD_PARTY='composer_manager'
+    - DRUPAL_3RD_PARTY='libraries'
 
 before_install:
+  - phpenv config-rm xdebug.ini
+  - ~/.phpenv/versions/$(phpenv version-name)/bin/composer self-update
   - export UPDATE TRAVIS_BUILD_DIR
   - BUILD_TOP=`dirname $TRAVIS_BUILD_DIR`
   - EXIT_VALUE=0
@@ -33,32 +32,53 @@ before_install:
   # mail requirements
   - sudo apt-get update -qq
   - sudo apt-get install -y -qq postfix
+  - sudo apt-get upgrade
 install:
-  # install php packages required for running a web server from drush on php 5.3
-  - sudo apt-get install -y --force-yes php5-cgi php5-mysql
-  # install drush globally
-  - composer self-update
-  - composer global require drush/drush:6.*
-  # add composer's global bin directory to the path
-  # see: https://github.com/drush-ops/drush#install---composer
-  - export PATH="$HOME/.composer/vendor/bin:$PATH"
+  - sudo apt-get install software-properties-common -y
+  - sudo apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xF1656F24C74CD1D8
+  - sudo add-apt-repository 'deb [arch=amd64,i386,ppc64el] http://ftp.utexas.edu/mariadb/repo/10.1/ubuntu xenial main'
+  - sudo apt-get update -y
+  - sudo apt-get install mariadb-server -y
+  - sudo apt-get -y install apache2
+  - sudo apt-get -y install sendmail uuid uuid-runtime curl policycoreutils unzip patch git nano gcc make autoconf libc-dev pkg-config
+  - sudo apt-get -y --force-yes install php php7.2-fpm php7.2-gd php7.2-xml php-common php-mysql php-ldap php-cgi php-pear php7.2-mbstring php7.2-zip php-xml php-curl php-cli php-apcu php-dev libmcrypt-dev
+  - sudo curl -sS https://getcomposer.org/installer | php
+  - sudo mv composer.phar /usr/local/bin/composer
+  - sudo sed -i '1i export PATH="/home/travis/.composer/vendor/bin:$PATH"' /home/travis/.bashrc
+  - sudo sed -i '1i export PATH="/home/travis/.config/composer/vendor/bin:$PATH"' /home/travis/.bashrc
+  - source /home/travis/.bashrc
+  # full path to execute in case root needs to log out before it picks it up
+  - php /usr/local/bin/composer global require consolidation/cgr
+  - cgr drush/drush:8.x-dev --prefer-source
 before_script:
   - cd ../../../
-  - sudo apt-get install apache2 libapache2-mod-fastcgi
   # enable php-fpm
   - sudo cp ~/.phpenv/versions/$(phpenv version-name)/etc/php-fpm.conf.default ~/.phpenv/versions/$(phpenv version-name)/etc/php-fpm.conf
-  - sudo a2enmod rewrite actions fastcgi alias
-  - echo "cgi.fix_pathinfo = 1" >> ~/.phpenv/versions/$(phpenv version-name)/etc/php.ini
+  - sudo a2enmod rewrite actions alias
+  - sudo a2enmod proxy_fcgi setenvif
+  - sudo a2enconf php7.2-fpm
+  - sudo a2dismod mpm_prefork
+  - sudo a2enmod mpm_event
+  - sudo a2enmod ssl rewrite headers
+  - sudo pecl channel-update pecl.php.net
   - ~/.phpenv/versions/$(phpenv version-name)/sbin/php-fpm
-  # configure apache virtual hosts
   - sudo mkdir -p /etc/apache2/sites-available
   - sudo mkdir -p /etc/apache2/sites-enabled
   - sudo service apache2 restart
+  - sudo service php7.2-fpm restart
+  - sudo service mariadb restart
+  - sudo service apache2 restart
+  - sudo apt-get install libyaml-dev -y
+  - yes '' | sudo pecl install -f yaml-2.0.0
+  - yes '' | sudo pecl install -f mcrypt-1.0.1
+  - sudo phpenmod yaml
+  - sudo service php7.2-fpm restart
+  # sometimes these are not installed for some reason
+  - sudo apt-get -y install php7.2-mbstring php7.2-zip
+  - sudo groupadd elmsln
   # setup fake mailserver
   - sudo service postfix stop
-  - smtp-sink -d "%d.%H.%M.%S" 127.0.0.1:2500 1000 &
-  - echo -e '#!/usr/bin/env bash\nexit 0' | sudo tee /usr/sbin/sendmail
-  - echo 'sendmail_path = "/usr/sbin/sendmail -t -i "' | sudo tee "/home/travis/.phpenv/versions/`php -i | grep "PHP Version" | head -n 1 | grep -o -P '\d+\.\d+\.\d+.*'`/etc/conf.d/sendmail.ini"
+  # elms setup stuff... finally
   - sudo mkdir -p /var/www
   - sudo chown -R travis:travis /var/www
   # symlink to the code that was pulled in for testing
@@ -79,8 +99,11 @@ before_script:
   - sudo chown -R travis:travis /home/travis/.drush
   - cat /home/travis/.bashrc
   - cat /var/www/elmsln/config/scripts/drush-create-site/config.cfg
+  - cat /var/www/elmsln/config/scripts/drush-create-site/configpwd.cfg
   # due to weirdness in travis w/ php versions we have to do it this way
   - cat /var/www/elmsln/scripts/server/php.txt >> ~/.phpenv/versions/$(phpenv version-name)/etc/php.ini
+  - ls -lasD /etc/apache2/sites-enabled
+  - ls -lasD /etc/apache2/sites-available
   - sudo service apache2 restart
 script:
   - sudo chown -R travis:travis /var/www/elmsln
@@ -90,8 +113,6 @@ script:
   - pwd
   # run the installer
   - bash /var/www/elmsln/scripts/install/elmsln-install.sh
-  # see what the
-  - cat /var/www/elmsln/config/shared/drupal-7.x/modules/_elmsln_scripted/travis/travis_tc_settings/travis_tc_settings.module
   - drush sa
   - drush @online cc drush
   - drush @online en cis_example_cis --y
@@ -106,10 +127,7 @@ after_script:
   - drush @online status
 
 notifications:
-  irc: irc.freenode.org#elmsln
-  webhooks: https://demo.elmsln.org/build-passed.php?token=POijnbYhujiH7*768iJNnjNamkkdjnhba9873654rtghnfjBNz
   email: false
   slack:
     rooms:
       - elmsln:WmKTRMe7k3IjprunaAVV3Jjg#qa
-      - elmsln:WmKTRMe7k3IjprunaAVV3Jjg#code

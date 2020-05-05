@@ -1,0 +1,389 @@
+<?php
+/**
+ * @file
+ * Define links for a unified experience across systems.
+ */
+define('CIS_SERVICE_CONNECTION_SYNC_FREQUENCY', 1);
+define('CIS_SERVICE_CONNECTION_HOMEPAGE', 'welcome_page');
+
+/**
+ * return array of links we support
+ */
+function _cis_service_connection_links() {
+  return array('welcome_page', 'syllabus', 'course-help', 'resources');
+}
+
+/**
+ * Implements hook_menu().
+ */
+function cis_service_connection_menu() {
+  $items = array();
+  // section specific language, or generic based on context
+  $items['welcome_page'] = array(
+    'title' => 'Welcome',
+    'page callback' => '_cis_service_connection_page',
+    'page arguments' => array(0),
+    'menu_name' => 'main-menu',
+    'weight' => -1,
+    'access arguments' => array('view lmsless bar'),
+  );
+  // standard language from cis
+  $items['syllabus'] = array(
+    'title' => 'Syllabus',
+    'page callback' => '_cis_service_connection_page',
+    'page arguments' => array(0),
+    'menu_name' => 'main-menu',
+    'weight' => 0,
+    'access arguments' => array('view lmsless bar'),
+  );
+  // standard language from cis for help
+  $items['course-help'] = array(
+    'title' => 'Help',
+    'page callback' => '_cis_service_connection_page',
+    'page arguments' => array(0),
+    'menu_name' => 'main-menu',
+    'weight' => 1,
+    'access arguments' => array('view lmsless bar'),
+  );
+  // standard language from cis
+  $items['resources'] = array(
+    'title' => 'Resources',
+    'page callback' => '_cis_service_connection_page',
+    'page arguments' => array(0),
+    'menu_name' => 'main-menu',
+    'weight' => 2,
+    'access arguments' => array('view lmsless bar'),
+  );
+    // Guided tour off of the welcome page with example content
+  $items['guided_tour'] = array(
+    'title' => 'Guided tour',
+    'page callback' => '_cis_service_connection_page',
+    'page arguments' => array(0),
+    'menu_name' => 'main-menu',
+    'weight' => 10,
+    'access arguments' => array('view lmsless bar'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  // direct download of the welcome letter, useful for remote referencing
+  $items['welcome_page/download'] = array(
+    'title' => 'Letter',
+    'page callback' => '_cis_connector_transaction',
+    'page arguments' => array('welcome_letter', 1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2,
+    'access arguments' => array('view lmsless bar'),
+  );
+  // direct download of the syllabus, useful for remote referencing
+  $items['syllabus/download'] = array(
+    'title' => 'Download',
+    'page callback' => '_cis_connector_transaction',
+    'page arguments' => array(0, 1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2,
+    'access arguments' => array('view lmsless bar'),
+  );
+  // build tabs for pages
+  $vals = _cis_service_connection_links();
+  foreach ($vals as $val) {
+    $items[$val . '/view'] = array(
+      'title' => 'View',
+      'page callback' => '_cis_connector_transaction',
+      'page arguments' => array(0),
+      'menu_name' => 'main-menu',
+      'weight' => 0,
+      'access arguments' => array('view lmsless bar'),
+      'type' => MENU_DEFAULT_LOCAL_TASK
+    );
+    $items[$val . '/edit'] = array(
+      'title' => 'Edit',
+      'page callback' => '_cis_service_connection_edit_property',
+      'page arguments' => array(0),
+      'weight' => 1,
+      'access callback' => 'cis_connector_role_access',
+      'access arguments' => array(array('administrator', 'instructor', 'staff')),
+      'type' => MENU_LOCAL_TASK,
+    );
+  }
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function cis_service_connection_permission() {
+  return array(
+    'switch section context' => array(
+      'title' => t('Switch Section context'),
+      'description' => t('Allows user to utilize a block that switches the reported section context.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function cis_service_connection_block_info() {
+  $blocks = array(
+    'instructor_contact' => array(
+      'info' => t('Instructor contact info'),
+      'cache' => DRUPAL_CACHE_PER_USER,
+    ),
+    'managed_footer' => array(
+      'info' => t('CIS managed footer'),
+      'cache' => DRUPAL_CACHE_GLOBAL,
+    ),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function cis_service_connection_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'instructor_contact':
+      $block['subject'] = t('Instructor Contact');
+      $block['content'] = cis_service_connection_block_instructor_contact();
+    break;
+    case 'managed_footer':
+      $block['subject'] = '<none>';
+      $block['content'] = cis_service_connection_get_footer_language();
+    break;
+  }
+  return $block;
+}
+
+/**
+ * Callback to provide contextual link to correct location
+ */
+function _cis_service_connection_edit_property($property) {
+  $section = _cis_connector_transaction('section');
+  // ensure that we have a valid section
+  if (!empty($section)) {
+    // redirect to the CIS to modify this section data
+    _elmsln_core_remote_redirect('cis', 'field_sections', $section['item_id'], 'edit?destination=elmsln/redirect/' . elmsln_core_get_profile_key() . '/' . arg(0) .'&elmsln_course=' . _cis_connector_course_context());
+  }
+  else {
+    drupal_set_message(t('Currently viewing section %s', array('%s' => _cis_connector_section_context())), 'toast');
+    return t('Please choose a valid section in order to edit its contents in the CIS.');
+  }
+}
+
+/**
+ * Implements hook_webcomponents_cmstokenendpoint_alter().
+ */
+function cis_service_connection_webcomponents_cmstokenendpoint_alter(&$js) {
+  $vals = _cis_service_connection_links();
+  foreach ($vals as $val) {
+    if (arg(0) == $val) {
+      $js .= 'textbook_editor';
+    }
+  }
+}
+
+/**
+ * Callback to assemble pages correctly.
+ */
+function _cis_service_connection_page($request) {
+  $output = '';
+  $suffix = '';
+  if ($request == 'course-help') {
+    $request = 'help';
+  }
+  // allow for per option processing
+  switch ($request) {
+    case 'help':
+      // first thing student sees is instructor contact info
+      $info = _cis_connector_transaction('contact_info');
+      // render text applying the input filter requested
+      if (isset($info['value'])) {
+        $suffix .= '<h2>' . t('Instructor Contact') . '</h2>' . $info['value'];
+      }
+    break;
+  }
+  // apply traditional transaction for the request
+  $body = _cis_connector_transaction($request);
+  if (isset($body['value'])) {
+    if ($request == 'help') {
+      $body['value'] = $body['help'] . $suffix . $body['value'];
+    }
+    else {
+      $body['value'] = $suffix . $body['value'];
+    }
+    // check the markup of the format
+    $output .= check_markup($body['value'], $body['format']);
+  }
+  else if (is_string($body)) {
+    // strings returned from CIS transaction have already been sanitized
+    $output = $body;
+  }
+  return $output;
+}
+
+/**
+ * Callback for instructor contact block content.
+ */
+function cis_service_connection_block_instructor_contact() {
+  // pull contact info from cis
+  $info = _cis_connector_transaction('contact_info');
+  // ensure we have contact info to display
+  if (!empty($info)) {
+    // run listed input filter
+    return check_markup($info['value'], $info['format']);
+  }
+  return FALSE;
+}
+
+/**
+ * Callback to render a list of optional section contexts to cycle through
+ */
+function cis_service_connection_block_section_context_changer_form() {
+  // provide all sections of students in this course
+  $form = array();
+  if (module_exists('cis_section')) {
+    // @todo add FALSE, TRUE in the flags here in the future so that we can
+    // ONLY show things they have access to. Only do this after we've got a
+    // mechanism for people to allow fellow instructors to access their stuff
+    // as an alternate role.
+    $sections = cis_section_all_sections();
+    foreach ($sections as $key => $value) {
+      $cisSectionData = _cis_connector_transaction('section', 'default', array(), $key);
+      if (isset($cisSectionData['host_entity']['field_semester']['und'][0]['value'])) {
+        $sections[$key] = strtoupper($cisSectionData['host_entity']['field_semester']['und'][0]['value']) . $cisSectionData['host_entity']['field_year']['und'][0]['value'] . ' - ' . $value;
+      }
+      // allow developers to hijack this / make it as they need displayed
+      drupal_alter('cis_lmsless_section_title', $sections[$key], $key, $cisSectionData);
+    }
+
+    $form['section'] = array(
+      '#type' => 'select',
+      '#options' => $sections,
+      '#id' => 'section-to-view',
+      '#title' => t('Section to view'),
+      '#default_value' => _cis_connector_section_context(),
+    );
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Switch section'),
+    );
+    // check for section context override
+    if (isset($_SESSION['cis_section_context'])) {
+      $form['reset'] = array(
+        '#type' => 'submit',
+        '#value' => t('Reset section'),
+      );
+      $form['elmsln_share_section'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Share'),
+        '#value' => url(current_path(), array('absolute' => TRUE, 'query' => array('elmsln_active_section' => $_SESSION['cis_section_context']))),
+      );
+    }
+  }
+  return $form;
+}
+
+/**
+ * Submit handler for the context changer block.
+ */
+function cis_service_connection_block_section_context_changer_form_submit($form, &$form_state) {
+  // set global state or unset the context switch
+  if ($form_state['input']['op'] == 'Reset') {
+    unset($_SESSION['cis_section_context']);
+    drupal_set_message(t('Section context reset to default.'), 'toast');
+  }
+  else {
+    $_SESSION['cis_section_context'] = $form_state['values']['section'];
+    drupal_set_message(t('Section context set to @section. You will now experience the course the same way students of this section do.', array('@section' => $form_state['values']['section'])), 'toast');
+  }
+  // when state changes redirect to the homepage and reflect a message
+  $form_state['redirect'] = '<front>';
+}
+
+/**
+ * Helper function to set footer language from CIS.
+ */
+function cis_service_connection_get_footer_language() {
+  // request the standard footer language
+  $query = array(
+    'type' => 'resource',
+    'field_machine_name' => 'footer_language',
+  );
+  $response = _cis_connection_query($query);
+  if ($response && isset($response['list'][0])) {
+    // render text applying the input filter requested
+    // @ignore coder_tough_love_14
+    $text = str_replace('!current', date('Y'), $response['list'][0]['body']['value']);
+    return $text;
+  }
+  // if we didn't get a response return nothing
+  return '';
+}
+
+/**
+ * Implements hook_cron().
+ */
+function cis_service_connection_cron() {
+  $frequency = variable_get('cis_service_connection_sync_frequency', CIS_SERVICE_CONNECTION_SYNC_FREQUENCY);
+  $interval['interval'] = 86400 * $frequency;
+  $interval['weekly'] = 86400 * 7 * $frequency;
+  $interval['monthly'] = 86400 * 28 * $frequency;
+  $interval['yearly'] = 86400 * 365 * $frequency;
+  // if last sync isn't set this is the first cron run
+  if (variable_get('cis_service_connection_last_sync', 0) == 0) {
+    // perform the initial setup routine
+    // this will help bind the CIS to this instance of the service
+    _cis_service_connection_initial_cis_bind();
+    // if initial bind then end early
+    return TRUE;
+  }
+  // see if this is just beyond the initial run
+  if (variable_get('cis_service_connection_initial', FALSE)) {
+    // ask for the LTI request that will be recognized locally
+    if (module_exists('cis_service_lti')) {
+      _cis_service_lti_get_consumer();
+    }
+    // delete this variable so this doesn't run ever again
+    variable_del('cis_service_connection_initial');
+  }
+
+  // if last sync is less then the update interval, update
+  if ((REQUEST_TIME - variable_get('cis_service_connection_last_sync', 0)) > $interval['interval']) {
+    // select the service instance in question based on uuid
+    $select = array(
+      'type' => 'service_instance',
+      'uuid' => variable_get('cis_service_instance_uuid', '')
+    );    
+    variable_set('cis_service_connection_last_sync', REQUEST_TIME);
+  }
+  // weekly sync
+  if ((REQUEST_TIME - variable_get('cis_service_connection_weekly_last_sync', 0)) > $interval['weekly']) {
+    variable_set('cis_service_connection_weekly_last_sync', REQUEST_TIME);
+  }
+  // monthly sync
+  if ((REQUEST_TIME - variable_get('cis_service_connection_monthly_last_sync', 0)) > $interval['monthly']) {
+    // get the latest footer copy language
+    variable_set('cis_service_connection_monthly_last_sync', REQUEST_TIME);
+  }
+  // yearly sync
+  if ((REQUEST_TIME - variable_get('cis_service_connection_yearly_last_sync', 0)) > $interval['yearly']) {
+    variable_set('cis_service_connection_yearly_last_sync', REQUEST_TIME);
+  }
+  // clear cached versions of section queries regardless of condition
+  _cis_connector_cache_clear();
+}
+
+/**
+ * Initial cron job to formally bind the CIS Service to the CIS.
+ */
+function _cis_service_connection_initial_cis_bind() {
+  // select the service instance in question based on uuid
+  $select = array(
+    'type' => 'service_instance',
+    'uuid' => variable_get('cis_service_instance_uuid', '')
+  );
+  // set last sync time
+  variable_set('cis_service_connection_last_sync', REQUEST_TIME);
+  // set this to say initial happened but we may need to do it again
+  variable_set('cis_service_connection_initial', TRUE);
+}

@@ -35,10 +35,25 @@ function icor_interactive_player_strongarm() {
     'extra_fields' => array(
       'form' => array(
         'title' => array(
-          'weight' => '0',
+          'weight' => '1',
         ),
         'path' => array(
           'weight' => '4',
+        ),
+        'hidden_nodes' => array(
+          'weight' => '8',
+        ),
+        'book' => array(
+          'weight' => '9',
+        ),
+        'options' => array(
+          'weight' => '6',
+        ),
+        'author' => array(
+          'weight' => '7',
+        ),
+        'revision_information' => array(
+          'weight' => '5',
         ),
       ),
       'display' => array(
@@ -85,7 +100,7 @@ function icor_interactive_player_strongarm() {
   $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
   $strongarm->api_version = 1;
   $strongarm->name = 'node_preview_icor_interactive_player';
-  $strongarm->value = '1';
+  $strongarm->value = '0';
   $export['node_preview_icor_interactive_player'] = $strongarm;
 
   $strongarm = new stdClass();

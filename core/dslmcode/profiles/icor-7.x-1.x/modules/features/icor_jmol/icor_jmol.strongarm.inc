@@ -44,10 +44,25 @@ function icor_jmol_strongarm() {
     'extra_fields' => array(
       'form' => array(
         'title' => array(
-          'weight' => '-5',
+          'weight' => '1',
         ),
         'path' => array(
-          'weight' => '30',
+          'weight' => '3',
+        ),
+        'hidden_nodes' => array(
+          'weight' => '7',
+        ),
+        'book' => array(
+          'weight' => '8',
+        ),
+        'options' => array(
+          'weight' => '5',
+        ),
+        'author' => array(
+          'weight' => '6',
+        ),
+        'revision_information' => array(
+          'weight' => '4',
         ),
       ),
       'display' => array(),
@@ -83,7 +98,7 @@ function icor_jmol_strongarm() {
   $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
   $strongarm->api_version = 1;
   $strongarm->name = 'node_preview_jmol';
-  $strongarm->value = '1';
+  $strongarm->value = '0';
   $export['node_preview_jmol'] = $strongarm;
 
   $strongarm = new stdClass();

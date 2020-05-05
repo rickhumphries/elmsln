@@ -1,0 +1,18 @@
+{
+  "name": "lrnapp-media-upload",
+  "short_name": "lrnapp-media-upload",
+  "description": "Show all media for a course",
+  "start_url": "/",
+  "display": "standalone",
+  "app_integration": {
+    "element": "node_modules/@lrnwebcomponents/elmsln-apps/lib/lrnapp-media-upload/lrnapp-media-upload.js",
+    "block": true,
+    "title": "Media upload",
+    "endpoints": {
+      "data": {
+        "callback": "_webcomponent_app_lrnapp_media_upload",
+        "property": "upload-path"
+      }
+    }
+  }
+}

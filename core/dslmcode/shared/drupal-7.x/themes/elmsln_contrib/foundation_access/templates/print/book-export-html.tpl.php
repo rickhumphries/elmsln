@@ -23,6 +23,8 @@
   <head>
     <title><?php print $title; ?></title>
     <?php print $head; ?>
+    <?php print $styles; ?>
+    <?php print $scripts; ?>
     <base href="<?php print $base_url; ?>" />
     <link type="text/css" rel="stylesheet" href="<?php print base_path(); ?>misc/print.css" />
     <?php if ($language_rtl): ?>

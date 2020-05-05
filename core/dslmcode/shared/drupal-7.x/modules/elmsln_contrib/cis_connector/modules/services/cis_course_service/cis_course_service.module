@@ -1,0 +1,32 @@
+<?php
+/**
+ * @file
+ * Code for the CIS Course Service feature.
+ */
+
+include_once 'cis_course_service.features.inc';
+/**
+ * @file
+ * Code for CIS Course Service to integrate any Service into ELMSLN.
+ */
+
+
+/**
+ * Implements hook_elmsln_api_info().
+ */
+function cis_course_service_elmsln_api_info() {
+  // populate a course network
+  $callbacks['sync_data_model'] = array(
+    'methods' => array('POST'),
+    'bootstrap' => DRUPAL_BOOTSTRAP_FULL,
+    'file' => 'callbacks/v1/sync_data_model.inc',
+  );
+  // get service
+  $callbacks['get_service_options'] = array(
+    'methods' => array('POST'),
+    'bootstrap' => DRUPAL_BOOTSTRAP_FULL,
+    'file' => 'callbacks/v1/get_service_options.inc',
+  );
+
+  return $callbacks;
+}

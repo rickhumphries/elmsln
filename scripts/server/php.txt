@@ -31,9 +31,13 @@ memory_limit = 256M
 error_reporting = E_ALL & ~E_DEPRECATED
 
 ; increase max file upload size from defaults
-upload_max_filesize = 50M
-post_max_size = 50M
+upload_max_filesize = 2000M
+post_max_size = 2000M
+max_file_size = 2000M
 
 ; Recommendation from @mcarper
 realpath_cache_size = 1M
 realpath_cache_ttl = 3600
+
+; Corrects larger deployments and Outline Designer saving the page
+max_input_vars = 10000

@@ -1,3 +1,4 @@
+/* global H5PAdminIntegration*/
 var H5PUtils = H5PUtils || {};
 
 (function ($) {
@@ -9,7 +10,7 @@ var H5PUtils = H5PUtils || {};
   H5PUtils.createTable = function (headers) {
     var $table = $('<table class="h5p-admin-table' + (H5PAdminIntegration.extraTableClasses !== undefined ? ' ' + H5PAdminIntegration.extraTableClasses : '') + '"></table>');
 
-    if(headers) {
+    if (headers) {
       var $thead = $('<thead></thead>');
       var $tr = $('<tr></tr>');
 
@@ -44,7 +45,7 @@ var H5PUtils = H5PUtils || {};
         };
       }
 
-        $('<td/>', value).appendTo($tr);
+      $('<td/>', value).appendTo($tr);
     });
 
     return $tr;
@@ -303,6 +304,8 @@ var H5PUtils = H5PUtils || {};
 
       $tbody.replaceWith($newTbody);
       $tbody = $newTbody;
+
+      return $tbody;
     };
 
     /**

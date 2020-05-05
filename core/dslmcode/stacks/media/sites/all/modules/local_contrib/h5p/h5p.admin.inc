@@ -1,44 +1,77 @@
 <?php
+
 /**
  * Menu callback - Form builder function for settings.
  */
 function h5p_admin_settings($form, &$form_state) {
+  // make sure core is loaded
+  $core = _h5p_get_instance('core');
+  $path = drupal_get_path('module', 'h5p');
 
+  // Get server setup error messages
+  $server_setup_errors = $core->checkSetupErrorMessage()->errors;
+  $disable_hub_data = array(
+    'errors' => $server_setup_errors,
+    'header' => $core->h5pF->t('Confirmation action'),
+    'confirmationDialogMsg' => $core->h5pF->t('Do you still want to enable the hub ?'),
+    'cancelLabel' => $core->h5pF->t('Cancel'),
+    'confirmLabel' => $core->h5pF->t('Confirm')
+  );
   $form['h5p_display_options'] = array(
     '#type' => 'fieldset',
     '#title' => t('Display Options'),
-    '#attributes' => array(
-      'class' => array('h5p-action-bar-settings')
-    ),
     '#attached' => array(
-      'js' => array(drupal_get_path('module', 'h5p') . '/library/js/disable.js')
+      'js' => array(
+        array(
+          'data' => 'H5PDisableHubData = ' . json_encode($disable_hub_data) . ';',
+          'type' => 'inline'
+        ),
+        $path . '/library/js/jquery.js',
+        $path . '/library/js/h5p-event-dispatcher.js',
+        $path . '/library/js/h5p-confirmation-dialog.js',
+        $path . '/library/js/settings/h5p-disable-hub.js',
+        $path . '/library/js/h5p-display-options.js',
+      ),
+      'css' => array(
+        $path . '/library/styles/h5p-confirmation-dialog.css',
+        $path . '/library/styles/h5p.css',
+        $path . '/library/styles/h5p-core-button.css'
+      )
     )
   );
 
-  $labels = _h5p_get_disable_labels();
-  foreach (H5PCore::$disable as $bit => $name) {
-    $name = ($bit & H5PCore::DISABLE_DOWNLOAD ? 'export' : $name);
-    $form['h5p_display_options']['h5p_' . $name] = array(
-      '#type' => 'checkbox',
-      '#title' => $labels[$bit],
-      '#default_value' => variable_get('h5p_' . $name, TRUE)
-    );
-  }
+  $button_behaviours_download = array(
+    H5PDisplayOptionBehaviour::NEVER_SHOW => t('Never'),
+    H5PDisplayOptionBehaviour::ALWAYS_SHOW => t('Always '),
+    H5PDisplayOptionBehaviour::CONTROLLED_BY_PERMISSIONS => t('Only if permitted through permissions'),
+    H5PDisplayOptionBehaviour::CONTROLLED_BY_AUTHOR_DEFAULT_ON => t('Controlled by author, default is on'),
+    H5PDisplayOptionBehaviour::CONTROLLED_BY_AUTHOR_DEFAULT_OFF => t('Controlled by author, default is off'),
+  );
+
+  $button_behaviours_embed = array(
+    H5PDisplayOptionBehaviour::NEVER_SHOW => t('Never show'),
+    H5PDisplayOptionBehaviour::ALWAYS_SHOW => t('Always show'),
+    H5PDisplayOptionBehaviour::CONTROLLED_BY_PERMISSIONS => t('Show only if permitted through permissions'),
+    H5PDisplayOptionBehaviour::CONTROLLED_BY_AUTHOR_DEFAULT_ON => t('Controlled by author, default is on'),
+    H5PDisplayOptionBehaviour::CONTROLLED_BY_AUTHOR_DEFAULT_OFF => t('Controlled by author, default is off'),
+  );
+
+  _h5p_add_display_option($form['h5p_display_options'], 'h5p_frame', t('Display buttons (download, embed and copyright)'), variable_get('h5p_frame', TRUE), '.form-item-h5p-export, .form-item-h5p-embed, .form-item-h5p-copyright, .form-item-h5p-icon');
+  $form['h5p_display_options']['h5p_export'] = array(
+    '#title' => t('Allow download'),
+    '#options' => $button_behaviours_download,
+    '#default_value' => variable_get('h5p_export', H5PDisplayOptionBehaviour::ALWAYS_SHOW),
+    '#type' => 'select',
+  );
+  $form['h5p_display_options']['h5p_embed'] = array(
+    '#title' => t('Embed button'),
+    '#options' => $button_behaviours_embed,
+    '#default_value' => variable_get('h5p_embed', H5PDisplayOptionBehaviour::ALWAYS_SHOW),
+    '#type' => 'select',
+  );
+  _h5p_add_display_option($form['h5p_display_options'], 'h5p_copyright', t('Copyright button'), variable_get('h5p_copyright', TRUE));
+  _h5p_add_display_option($form['h5p_display_options'], 'h5p_icon', t('About H5P button'), variable_get('h5p_icon', TRUE));
   // TODO: Should we remove existing H5P files when export gets disabled?
-
-  // Disable/enable the H5P icon below each H5P
-  $form['h5p_display_options']['h5p_icon_in_action_bar'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('About H5P button'),
-    '#default_value' => variable_get('h5p_icon_in_action_bar', TRUE)
-  );
-
-  $form['h5p_default_path'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Default h5p package path'),
-    '#default_value' => variable_get('h5p_default_path', 'h5p'),
-    '#description' => t('Subdirectory in the directory %dir where files will be stored. Do not include trailing slash.', array('%dir' => file_stream_wrapper_get_instance_by_uri('public://')->realpath())),
-  );
 
   $h5p_nodes_exists = db_query("SELECT 1 FROM {node} WHERE type = :type", array(':type' => 'h5p_content'))->fetchField();
 
@@ -50,8 +83,7 @@ function h5p_admin_settings($form, &$form_state) {
     '#disabled' => $h5p_nodes_exists,
   );
 
-  // make sure core is loaded
-  _h5p_get_instance('core');
+
   $form['h5p_whitelist'] = array(
     '#type' => 'textfield',
     '#maxlength' => 8192,
@@ -74,13 +106,6 @@ function h5p_admin_settings($form, &$form_state) {
     '#title' => t('Enable H5P development mode'),
     '#default_value' => variable_get('h5p_dev_mode', '0'),
     '#description' => t('Always update uploaded H5P libraries regardless of patch version. Read library data from file (semantics.json).')
-  );
-
-  $form['h5p_allow_communication_with_h5p_org'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Get updates from h5p.org'),
-    '#default_value' => variable_get('h5p_allow_communication_with_h5p_org', '1'),
-    '#description' => t('Currently only tutorials are being updated, but in the future notification about code updates and more will be fetched from H5P.org'),
   );
 
 //  $form['h5p_content_dev_mode'] = array(
@@ -112,6 +137,50 @@ function h5p_admin_settings($form, &$form_state) {
     '#description' => t("In seconds, how often do you wish the user to auto save their progress. Increasee this number if you're having issues with many ajax request."),
   );
 
+  $form['h5p_enable_lrs_content_types'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Enable LRS dependent content types'),
+    '#default_value' => variable_get('h5p_enable_lrs_content_types', 0),
+    '#description' => t('Makes it possible to use content types that rely upon a Learning Record Store to function properly, like the Questionnaire content type.'),
+  );
+
+  $form['h5p_hub_is_enabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Use H5P Hub'),
+    '#default_value' => variable_get('h5p_hub_is_enabled', TRUE),
+    '#attributes' => array('class' => array('h5p-settings-disable-hub-checkbox')),
+    '#description' => t("It's strongly encouraged to keep this option <strong>enabled</strong>. The H5P Hub provides an easy interface for getting new content types and keeping existing content types up to date. In the future, it will also make it easier to share and reuse content. If this option is disabled you'll have to install and update content types through file upload forms."),
+  );
+
+  // TODO: Be able to change site key
+//  $site_key = variable_get('h5p_site_key', variable_get('h5p_site_uuid', ''));
+//  $form['h5p_site_key'] = array(
+//    '#type' => 'textfield',
+//    '#title' => t('Site Key'),
+//    '#default_value' => '',
+//    '#attributes' => array(
+//      'data-value' => $site_key,
+//      'placeholder' => ($site_key ? '********-****-****-****-************' : t('Empty'))
+//    ),
+//    '#field_suffix' => '<button type="button" class="h5p-reveal-value" data-control="edit-h5p-site-key" data-hide="' . t('Hide') . '">' . t('Reveal') . '</button>',
+//    '#description' => t("The site key is a secret that uniquely identifies this site with the Hub."),
+//  );
+
+  $form['h5p_send_usage_statistics'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Automatically contribute usage statistics'),
+    '#default_value' => variable_get('h5p_send_usage_statistics', TRUE),
+    '#description' => t(
+        'Usage statistics numbers will automatically be reported to help the developers better ' .
+        'understand how H5P is used and to determine potential areas of improvement. Read more about ' .
+        'which <a href="@url">data is collected on h5p.org</a>.',
+        array('@url' => 'https://h5p.org/tracking-the-usage-of-h5p')
+    ),
+  );
+
+  // Set h5p settings class on form container
+  $form['#attributes'] = array('class' => array('h5p-settings-container'));
+
   // Make changes to the settings before passing them off to
   // system_settings_form_submit().
   $form['#submit'][] = 'h5p_admin_settings_submit';
@@ -123,18 +192,7 @@ function h5p_admin_settings($form, &$form_state) {
  * Form validation handler for admin settings form.
  */
 function h5p_admin_settings_validate($form, &$form_state) {
-  // Try to create directories and warn the user of errors.
-  $h5p_default_path = $form_state['values']['h5p_default_path'];
-  $path = file_stream_wrapper_get_instance_by_uri('public://')->realpath() . '/' . $h5p_default_path;
-  $temp_path = $path . '/' . 'temp';
-
-  if (!file_prepare_directory($path, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
-    form_set_error('h5p_default_path', t('You have specified an invalid directory.'));
-  }
-  if (!file_prepare_directory($temp_path, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
-    form_set_error('h5p_default_path', t('You have specified an invalid directory.'));
-  }
-
+  // Check if save content frequency is a positive number
   if (!is_numeric($form_state['values']['h5p_save_content_frequency']) || $form_state['values']['h5p_save_content_frequency'] < 0) {
     form_set_error('h5p_save_content_frequency', t('You must specify a positive number.'));
   }
@@ -144,14 +202,14 @@ function h5p_admin_settings_validate($form, &$form_state) {
  * Form submit handler for h5p admin settings form.
  */
 function h5p_admin_settings_submit($form, &$form_state) {
-  // Ensure that 'h5p_default_path' variable contains no trailing slash.
-  $form_state['values']['h5p_default_path'] = rtrim($form_state['values']['h5p_default_path'], '/\\');
   // Ensure that the h5p white list is always stored in lower case.
   $form_state['values']['h5p_whitelist'] = mb_strtolower($form_state['values']['h5p_whitelist']);
 
-  if($form_state['values']['h5p_allow_communication_with_h5p_org'] == 0) {
-    h5p_fetch_libraries_metadata(TRUE);
-  }
+  // TODO: Be able to change site key
+//  if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $form_state['values']['h5p_site_key'])) {
+//    // Invalid key, use the old one
+//    $form_state['values']['h5p_site_key'] = variable_get('h5p_site_key', variable_get('h5p_site_uuid', ''));
+//  }
 }
 
 /**
@@ -179,7 +237,7 @@ function h5p_library_list() {
         $restricted = ($library->restricted === '1' ? TRUE : FALSE);
         $restricted_url = url('admin/content/h5p/libraries/' . $library->id . '/restrict', array(
           'query' => array(
-            'token' => h5p_get_token('library_' . $i),
+            'token' => H5PCore::createToken('library_' . $i),
             'token_id' => $i,
             'restrict' => ($library->restricted === '1' ? 0 : 1)
           )
@@ -220,13 +278,31 @@ function h5p_library_list() {
   _h5p_admin_add_generic_css_and_js($module_path, $settings);
   drupal_add_js($module_path . '/library/js/h5p-library-list.js');
 
-  $upgrade_all_libraries = variable_get('h5p_unsupported_libraries', NULL) === NULL ? '' : '<p>' . t('Click <a href="@url">here</a> to upgrade all installed libraries', array('@url' => url('admin/content/h5p/libraries/upgrade-all'))) . '</p>';
-
   // Create the container which all admin content
   // will appends it's data to. This id is used by h5pintegration
   // to find where to put the admin content.
+
+  // Prepare output
+  $html = '';
+
+  // Content type cache update form
+  $hubOn = variable_get('h5p_hub_is_enabled', TRUE);
+  if ($hubOn) {
+    $ct_cache_update_form = drupal_get_form('h5p_content_type_cache_update_form');
+    $html .= '<h3 class="h5p-admin-header">' . t('Content type cache') . '</h3>' .
+             drupal_render($ct_cache_update_form);
+  }
+
+  // Add libraries form
   $upload_form = drupal_get_form('h5p_library_upload_form');
-  return '<h3 class="h5p-admin-header">' . t('Add libraries') . '</h3>' . drupal_render($upload_form) . '<h3 class="h5p-admin-header">' . t('Installed libraries') . '</h3>' . $upgrade_all_libraries . '<div id="h5p-admin-container"></div>';
+  $html .= '<h3 class="h5p-admin-header">' . t('Add libraries') . '</h3>' .
+           drupal_render($upload_form);
+
+  // Installed libraries list
+  $html .= '<h3 class="h5p-admin-header">' . t('Installed libraries') . '</h3>' .
+           '<div id="h5p-admin-container"></div>';
+
+  return $html;
 }
 
 /**
@@ -377,10 +453,51 @@ function _h5p_admin_add_generic_css_and_js($module_path, $settings = NULL) {
   drupal_add_js('H5PAdminIntegration = ' . json_encode($settings) . ';', 'inline');
   drupal_add_css($module_path . '/library/styles/h5p.css');
   drupal_add_css($module_path . '/library/styles/h5p-admin.css');
+  drupal_add_css($module_path . '/library/styles/h5p-hub-client.css');
 
   drupal_add_js(array(
     'h5p' => h5p_get_core_settings()
   ), 'setting');
+}
+
+/**
+ * Content type cache update form
+ *
+ * @param $form_state Drupal form state
+ *
+ * @return mixed Form
+ */
+function h5p_content_type_cache_update_form($form_state) {
+
+  $form['#attributes'] = array(
+    'class' => 'h5p-admin-upload-libraries-form'
+  );
+
+  $last_updated = variable_get('h5p_content_type_cache_updated_at', false);
+  $date_formatted = $last_updated ? format_date($last_updated) : t('Never');
+
+  $form['h5p_content_type_cache_last_updated'] = array(
+    '#type' => 'item',
+    '#title' => t('Last update'),
+    '#markup' => $date_formatted,
+    '#description' => t('Here you can update the content type cache from the H5P hub. This is used to show the available libraries in the H5P authoring tool. Making sure the content type cache is up to date will ensure that you can view and download the latest libraries.')
+  );
+
+  $form['submit'] = array(
+    '#value' => t('Update'),
+    '#type' => 'submit'
+  );
+
+  return $form;
+}
+
+/**
+ * Content type cache update form submit handler
+ */
+function h5p_content_type_cache_update_form_submit($form, &$form_state) {
+  // Update content type cache
+  $core = _h5p_get_instance('core');
+  $core->updateContentTypeCache();
 }
 
 /**
@@ -455,7 +572,7 @@ function h5p_library_upload_form_submit($form, &$form_state) {
  * Callback for rebuilding all content cache.
  */
 function h5p_rebuild_cache() {
-  if (filter_input(INPUT_SERVER, 'REQUEST_METHOD') !== 'POST') {
+  if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     drupal_set_message(t('HTTP POST is required.'), 'error');
     drupal_set_title(t('Error'));
     return '';
@@ -481,49 +598,28 @@ function h5p_rebuild_cache() {
 }
 
 /**
- * Get a new H5P security token.
- *
- * @param string $key
- * @return string
- */
-function h5p_get_token($key) {
-  return $_SESSION['h5p_' . $key] = uniqid('h5p-');
-}
-
-/**
- * Verifiy a given H5P security token.
- *
- * @param string $key
- * @param string $token
- * @return string
- */
-function h5p_verify_token($key, $token) {
-  return $_SESSION['h5p_' . $key] === $token;
-}
-
-/**
  * Callback for the library content upgrade page.
  *
  * @param int $library_id
  * @return string HTML
  */
 function h5p_content_upgrade($library_id) {
-  if (filter_input(INPUT_SERVER, 'REQUEST_METHOD') === 'POST') {
+  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     h5p_content_upgrade_progress($library_id);
     return;
   }
   $core = _h5p_get_instance('core');
 
-  $versions = db_query('SELECT hl2.library_id as id, hl2.machine_name as name, hl2.title, hl2.major_version, hl2.minor_version, hl2.patch_version FROM {h5p_libraries} hl1 JOIN {h5p_libraries} hl2 ON hl1.machine_name = hl2.machine_name WHERE hl1.library_id = :id ORDER BY hl2.title ASC, hl2.major_version ASC, hl2.minor_version ASC', array(':id' => $library_id));
-  foreach ($versions as $library) {
-    if ($library->id === $library_id) {
-      $upgrades = $core->getUpgrades($library, $versions);
-      break;
-    }
+  $results = db_query('SELECT hl2.library_id as id, hl2.machine_name as name, hl2.title, hl2.major_version, hl2.minor_version, hl2.patch_version FROM {h5p_libraries} hl1 JOIN {h5p_libraries} hl2 ON hl1.machine_name = hl2.machine_name WHERE hl1.library_id = :id ORDER BY hl2.title ASC, hl2.major_version ASC, hl2.minor_version ASC', array(':id' => $library_id));
+  $versions = array();
+  foreach ($results as $result) {
+    $versions[$result->id] = $result;
   }
+  $library = $versions[$library_id];
+  $upgrades = $core->getUpgrades($library, $versions);
 
   drupal_set_title(t('Upgrade @library content', array('@library' => $library->title . ' (' . H5PCore::libraryVersion($library) . ')')));
-  if ($versions->rowCount() < 2) {
+  if (count($versions) < 2) {
     return t("There are no available upgrades for this library.");
   }
 
@@ -546,6 +642,9 @@ function h5p_content_upgrade($library_id) {
       'errorScript' => t('Could not load upgrades script for %lib.'),
       'errorContent' => t('Could not upgrade content %id:'),
       'errorParamsBroken' => t('Parameters are broken.'),
+      'errorLibrary' => t('Missing required library %lib.'),
+      'errorTooHighVersion' => t('Parameters contain %used while only %supported or earlier are supported.'),
+      'errorNotSupported' => t('Parameters contain %used which is not supported.'),
       'done' => t('You have successfully upgraded %num.', array('%num' => $contents_plural)) . ($return ? ' ' . l(t('Return'), $return) : ''),
       'library' => array(
         'name' => $library->name,
@@ -559,7 +658,7 @@ function h5p_content_upgrade($library_id) {
       'buttonLabel' => t('Upgrade'),
       'infoUrl' => url('admin/content/h5p/libraries/' . $library_id . '/upgrade'),
       'total' => $contents,
-      'token' => h5p_get_token('content_upgrade'), // Use token to avoid unauthorized updating
+      'token' => H5PCore::createToken('contentupgrade'), // Use token to avoid unauthorized updating
     )
   );
 
@@ -580,7 +679,7 @@ function h5p_content_upgrade($library_id) {
  */
 function h5p_content_upgrade_progress($library_id) {
   // Verify security token
-  if (!h5p_verify_token('content_upgrade', filter_input(INPUT_POST, 'token'))) {
+  if (!H5PCore::validToken('contentupgrade', filter_input(INPUT_POST, 'token'))) {
     print t('Error: Invalid security token!');
     return;
   }
@@ -595,39 +694,85 @@ function h5p_content_upgrade_progress($library_id) {
   // Prepare response
   $out = new stdClass();
   $out->params = array();
-  $out->token = h5p_get_token('content_upgrade');
+  $out->token = H5PCore::createToken('contentupgrade');
 
   // Prepare our interface
   $interface = _h5p_get_instance('interface');
 
   // Get updated params
   $params = filter_input(INPUT_POST, 'params');
+
   if ($params !== NULL) {
     // Update params.
     $params = json_decode($params);
     foreach ($params as $id => $param) {
+      $upgraded = json_decode($param);
+      $metadata = isset($upgraded->metadata) ? $upgraded->metadata : array();
+
+      $fields = array_merge(H5PMetadata::toDBArray($metadata, false, false), array(
+        'main_library_id' => $to_library->id,
+        'json_content' => json_encode($upgraded->params),
+        'filtered' => '',
+      ));
+
       db_update('h5p_nodes')
-        ->fields(array(
-          'main_library_id' => $to_library->id,
-          'json_content' => $param,
-          'filtered' => ''
-        ))
+        ->fields($fields)
         ->condition('content_id', $id)
         ->execute();
 
+      // Log content upgrade successful
+      $title = db_query("SELECT title FROM {node} WHERE nid = :id", array(':id' => $id))->fetchField();
+      new H5PEvent('content', 'upgrade',
+        $id,
+        $title,
+        $to_library->name,
+        $to_library->major_version . '.' . $to_library->minor_version);
+
       // Clear content cache
-      $interface->setFilteredParameters($id);
+      $interface->updateContentFields($id, array(
+        'filtered' => ''
+      ));
     }
   }
 
+  // Determine if any content has been skipped during the process
+  $skipped = filter_input(INPUT_POST, 'skipped');
+  if ($skipped !== NULL) {
+    $out->skipped = json_decode($skipped);
+    // Clean up input, only numbers
+    foreach ($out->skipped as $i => $id) {
+      $out->skipped[$i] = intval($id);
+    }
+    $skipped = implode(',', $out->skipped);
+  }
+  else {
+    $out->skipped = array();
+  }
+
   // Get number of contents for this library
-  $out->left = $interface->getNumContent($library_id);
+  $out->left = $interface->getNumContent($library_id, $skipped);
 
   if ($out->left) {
+    $skip_query = empty($skipped) ? '' : " AND h.content_id NOT IN ($skipped)";
+
     // Find the 10 first contents using library and add to params
-    $contents = db_query('SELECT content_id AS id, json_content AS params FROM {h5p_nodes} WHERE main_library_id = :id LIMIT 40', array(':id' => $library_id));
+    $contents = db_query(
+        "SELECT h.content_id AS id,
+                h.json_content AS params,
+                n.title,
+                h.authors, h.source, h.license, h.license_version, h.license_extras,
+                h.year_from, h.year_to, h.changes, h.author_comments, h.default_language
+           FROM {h5p_nodes} h
+           JOIN {node} n ON n.nid = h.nid
+          WHERE h.main_library_id = :id
+                {$skip_query}
+          LIMIT 40",
+        array(':id' => $library_id));
+
     foreach ($contents as $content) {
-      $out->params[$content->id] = $content->params;
+      $out->params[$content->id] =
+        '{"params":' . $content->params .
+        ',"metadata":' . H5PMetadata::toJSON($content) . '}';
     }
   }
 
@@ -654,9 +799,6 @@ function h5p_content_upgrade_library($name, $major, $minor) {
 
   $core = _h5p_get_instance('core');
   $library->semantics = $core->loadLibrarySemantics($library->name, $library->version->major, $library->version->minor);
-  if ($library->semantics === NULL) {
-    drupal_not_found();
-  }
 
   if ($core->development_mode & H5PDevelopment::MODE_LIBRARY) {
     $dev_lib = $core->h5pD->getLibrary($library->name, $library->version->major, $library->version->minor);
@@ -677,7 +819,7 @@ function h5p_restrict_library_callback($library_id) {
   $restrict = ($restricted === '1');
 
   $token_id = filter_input(INPUT_GET, 'token_id');
-  if (!h5p_verify_token('library_' . $token_id, filter_input(INPUT_GET, 'token')) || (!$restrict && $restricted !== '0')) {
+  if (!H5PCore::validToken('library_' . $token_id, filter_input(INPUT_GET, 'token')) || (!$restrict && $restricted !== '0')) {
     return MENU_ACCESS_DENIED;
   }
 
@@ -691,7 +833,7 @@ function h5p_restrict_library_callback($library_id) {
   print json_encode(array(
     'url' => url('admin/content/h5p/libraries/' . $library_id . '/restrict', array(
       'query' => array(
-        'token' => h5p_get_token('library_' . $token_id),
+        'token' => H5PCore::createToken('library_' . $token_id),
         'token_id' => $token_id,
         'restrict' => ($restrict ? 0 : 1),
       )

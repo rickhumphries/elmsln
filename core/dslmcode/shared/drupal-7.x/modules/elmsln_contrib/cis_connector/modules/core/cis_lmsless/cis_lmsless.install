@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function cis_lmsless_install() {
+  // by default, everyone can view LMSLess bar
+  db_merge('role_permission')->key(array(
+    'rid' => 1,
+    'permission' => 'view lmsless bar',
+  ))->fields(array(
+    'module' => 'cis_lmsless',
+  ))->execute();
+  // auth users
+  db_merge('role_permission')->key(array(
+    'rid' => 2,
+    'permission' => 'view lmsless bar',
+  ))->fields(array(
+    'module' => 'cis_lmsless',
+  ))->execute();
+
+  // special case for CIS as it is typically an administrative system
+  // apply permission to teacher roles
+  $teachers = _cis_connector_role_groups('teacher');
+  foreach ($teachers as $name) {
+  	$role = user_role_load_by_name($name);
+    if (isset($role->rid)) {
+    	db_merge('role_permission')->key(array(
+        'rid' => $role->rid,
+        'permission' => 'view lmsless administration links',
+        ))->fields(array(
+        'module' => 'cis_lmsless',
+      ))->execute();
+    }
+  }
+  // apply these for staff roles
+  $staff = _cis_connector_role_groups('staff');
+  foreach ($staff as $name) {
+  	$role = user_role_load_by_name($name);
+    if (isset($role->rid)) {
+      db_merge('role_permission')->key(array(
+        'rid' => $role->rid,
+        'permission' => 'view lmsless administration links',
+        ))->fields(array(
+        'module' => 'cis_lmsless',
+      ))->execute();
+    }
+  }
+}
+
+/**
+ * Implements hook_update_N().
+ * 'view lmsless cis link' updated to change to
+ * 'view lmsless administration links' since there are far more administrative
+ * systems then when this permissions was initially created
+ */
+function cis_lmsless_update_7001(&$sandbox) {
+  // special case for CIS as it is typically an administrative system
+  // apply permission to teacher roles
+  $teachers = _cis_connector_role_groups('teacher');
+  foreach ($teachers as $name) {
+    $role = user_role_load_by_name($name);
+    if (isset($role->rid)) {
+      db_merge('role_permission')->key(array(
+        'rid' => $role->rid,
+        'permission' => 'view lmsless administration links',
+        ))->fields(array(
+        'module' => 'cis_lmsless',
+      ))->execute();
+    }
+  }
+  // apply these for staff roles
+  $staff = _cis_connector_role_groups('staff');
+  foreach ($staff as $name) {
+    $role = user_role_load_by_name($name);
+    if (isset($role->rid)) {
+      db_merge('role_permission')->key(array(
+        'rid' => $role->rid,
+        'permission' => 'view lmsless administration links',
+        ))->fields(array(
+        'module' => 'cis_lmsless',
+      ))->execute();
+    }
+  }
+}
+
+/**
+ * New image style for background.
+ */
+function cis_lmsless_update_7002(&$sandbox) {
+  features_revert_module('cis_lmsless');
+}
+
+/**
+ * Image styles updates to support better UX on display of these items.
+ */
+function cis_lmsless_update_7003(&$sandbox) {
+  module_enable(array('imagecache_actions', 'imagecache_coloractions', 'imagecache_autorotate'));
+  features_revert_module('cis_lmsless');
+}

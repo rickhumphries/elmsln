@@ -1,1 +1,95 @@
 /* CSS Document */
+.ev1-button--icon, .clipboard--button-only .clipboardjs-button {
+  margin-right: -100px;
+}
+
+.node-form .field-type-file,
+.node-form .field-type-image {
+  border: 1px solid grey;
+  padding: 4px;
+}
+.able-poster {
+  width: 100%;
+}
+
+.able .able-vidcap-container {
+  overflow: hidden;
+}
+
+/* structure in media */
+.scrollspy-toc .table-of-contents {
+  max-height: 65vh;
+  min-width: 10rem;
+  overflow-y: scroll;
+  width: calc(50vw - 52%);
+  max-width: 30em;
+  margin: 0;
+}
+
+#scrollspy-nav {
+  display: none;
+}
+
+@media screen and (min-width: 80rem) {
+  #scrollspy-nav {
+    position: absolute !important;
+    left: 100%;
+    width: calc(52vw - 52%);
+    max-width: 14em;
+    min-width: 8rem;
+    display: block;
+    max-height: 65vh;
+    overflow-y: scroll;
+  }
+}
+
+#scrollspy-nav,
+#scrollspy-nav .scrollspy-toc {
+  border-bottom-style: solid;
+  border-bottom-width: .1rem;
+}
+
+#scrollspy-nav .item-list ul li {
+  margin: 0;
+  padding: 0;
+}
+
+#scrollspy-nav ul li a {
+  font-size: .8rem;
+  font-weight: bold;
+}
+
+#scrollspy-nav ul li a:hover {
+  font-size: 1rem;
+}
+
+#scrollspy-nav ul li a:active {
+  background-color: #FFAA44;
+}
+
+.elmsln-card img.h5p-overlay-icon {
+  z-index: 100;
+  position: absolute;
+  width: 3rem;
+}
+
+.card-col paper-card {
+  margin: .5em 0;
+  min-height: 15em;
+  min-width: 15em;
+}
+paper-card .header.paper-card {
+  min-height: 10em;
+}
+paper-card .card-content lrnsys-button {
+  display: inline-flex;
+}
+paper-card .paper-card .title-text {
+  font-size: .8em !important;
+  background-color: white;
+  opacity: .6;
+  padding: .25em !important;
+}
+paper-card .paper-card:hover .title-text {
+  opacity: 1;
+}

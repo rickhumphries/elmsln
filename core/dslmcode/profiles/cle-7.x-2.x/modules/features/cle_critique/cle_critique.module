@@ -1,0 +1,166 @@
+<?php
+/**
+ * @file
+ * Code for the CLE Critique feature.
+ */
+
+/**
+ * Page callback: returns information to establish a headless application
+ * to connect to the site. This assumes a user session already exists.
+ */
+function _cle_critique_assignment($anid) {
+  $section_id = _cis_connector_section_context();
+  $section = _cis_section_load_section_by_id($section_id);
+  // look to see if they've submitted a critique against this assignment
+  // this would imply a submission node that references the assignment
+  // and the only assignments utilizing this endpoint will be in mode critique
+  $field_conditions = array(
+    'field_assignment' => array('target_id', $anid, '='),
+    'og_group_ref' => array('target_id', $section, '='),
+  );
+  $property_conditions = array(
+    'uid' => $GLOBALS['user']->uid,
+  );
+  $mycritique = _cis_connector_assemble_entity_list('node', 'cle_submission', 'nid', '_entity', $field_conditions, $property_conditions);
+  // this not being empty implies they've already started working on critiquing someone
+  // in this event we should return the thing they've started working on
+  if (!empty($mycritique)) {
+    $item = array_pop($mycritique);
+    $vars = array(
+      'status' => '200',
+      'node' => _cle_submission_v1_submission_output($item),
+      'detail' => t('Previously started critique delivered.')
+    );
+  }
+  else {
+    // if we passed that check, it means we haven't started a critique yet
+    // now let's make a stub
+    $entity = _elmsln_api_stub_node('cle_submission');
+    // ensure they can create a submission
+    if (entity_access('create', 'node', $entity)) {
+      // find someone to critique
+      $critique_assignment = node_load($anid);
+      $critanid = $critique_assignment->field_assignment_dependencies['und'][0]['target_id'];
+      $submission_to_critique = _cle_critique_random($critanid);
+      // ensure there is a result to critique
+      // if there isn't this implies that no one has done this submission yet
+      // other then this person submitting
+      if ($submission_to_critique) {
+        $assignment = node_load($anid);
+        // relate an assignment to submission
+        $params = array(
+          'relatedSubmission' => $submission_to_critique->nid,
+          'assignment' => $anid,
+          'title' => t('Critique of assignment @title', array('@title' => $assignment->title))
+        );
+        // generate the item via normal modify hooks based on params
+        $vars = _cle_submission_v1_submission_modify($entity, $params);
+        $node = node_load($vars['node']['nid']);
+        $vars['node'] = _cle_submission_v1_submission_output($node);
+      }
+      else {
+        $vars = array(
+          'status' => '409',
+          'node' => FALSE,
+          'detail' => t('No one to critique'),
+        );
+      }
+    }
+    else {
+      $vars = array(
+        'status' => '403',
+        'node' => FALSE,
+        'detail' => t('Unable to create submissions.'),
+      );
+    }
+  }
+  _elmsln_jsapi_deliver_output($vars);
+}
+
+/**
+ * Get a random submission node based on assignment
+ * @param  id $anid assignment node id
+ * @return object             student's submission node for critique
+ */
+function _cle_critique_random($anid) {
+  $section_id = _cis_connector_section_context();
+  $section = _cis_section_load_section_by_id($section_id);
+  // find all the critiques on current submissions they have access to
+  // make sure these submissions are filtered out below select submissions
+  $query = new EntityFieldQuery();
+  // pull all nodes
+  $query->entityCondition('entity_type', 'node')
+  // that are sections
+  ->entityCondition('bundle', 'cle_submission')
+  // that are published
+  ->propertyCondition('status', 1)
+  // that are NOT by the currently logged in user
+  ->propertyCondition('uid', $GLOBALS['user']->uid, '<>')
+  // only allow for pulling the submissions the could have access to
+  ->fieldCondition('field_assignment', 'target_id', $anid, '=')
+  // only to this section
+  ->fieldCondition('og_group_ref', 'target_id', $section, '=')
+  // the submission has been set to 'submission_ready'
+  ->fieldCondition('field_submission_state', 'value', 'submission_ready', '=')
+  // add a random query tag so we can randomize the response
+  ->addTag('random')
+  // only return 200 items in case this is a MOOC or something
+  ->range(0, 200);
+  // store results
+  $result = $query->execute();
+  // ensure we have results
+  if (isset($result['node'])) {
+    $nids = array_keys($result['node']);
+    // loop through and check if these exist as options
+    foreach ($nids as $nid) {
+      // see if anyone else has critiqued this already
+      $critiques = _cis_connector_assemble_entity_list('node', 'cle_submission', 'nid', '_entity', array('field_related_submission' => array('target_id', $nid, '=')));
+      // if this wasn't set then we know we can return this submission
+      // for rendering on the critique viewer
+      if (!isset($critiques[$nid])) {
+        $submission = node_load($nid);
+        return $submission;
+      }
+    }
+    // if we got here, it means all our random items were already selected
+    // so we better assign them someone to critique even though it already has a critique
+    // (implies random number of students)
+    $nid = array_pop($nids);
+    $submission = node_load($nid);
+    return $submission;
+  }
+  // there aren't any that exists
+  return FALSE;
+}
+
+/**
+ * Implementation of hook_query_TAG_alter().
+ */
+function cle_critique_query_random_alter($query){
+  $query->orderRandom();
+}
+
+/**
+ * Implements hook_cis_shortcode_render_alter().
+ */
+function cle_critique_cis_shortcode_render_alter(&$field, $entity, $type) {
+  // cle_assignment special submission type for critiques
+  if ($type == 'node' && $entity->type == 'cle_assignment') {
+    $properties = array(
+      'rev' => CIS_SHORTCODES_API_REV,
+      'tool' => elmsln_core_get_profile_key(),
+      'render' => 'submit',
+      'link' => 'cle/critique/critique-peer/' . $entity->nid . '?entity_iframe=true',
+      'text' => t('Submit critique'),
+      'modal' => 1,
+    );
+    // buid the direct link
+    $field['cis_shortcodes']['advanced']['cis_shortcodes_cle_critique'] = array(
+      '#title' => t('@title - Submit critique', array('@title' => $entity->title)),
+      '#attributes' => array('class' => array('cis_shortcodes_embed')),
+      '#value' => _cis_shortcodes_build_code($properties),
+      '#type' => 'textfield',
+      '#weight' => 0,
+    );
+  }
+}

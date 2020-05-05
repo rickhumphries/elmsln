@@ -32,7 +32,11 @@ function icor_defaults_views_default_views() {
     166149871 => '166149871',
     67296478 => '67296478',
   );
-  $handler->display->display_options['cache']['type'] = 'none';
+  $handler->display->display_options['cache']['type'] = 'time';
+  $handler->display->display_options['cache']['results_lifespan'] = '3600';
+  $handler->display->display_options['cache']['results_lifespan_custom'] = '0';
+  $handler->display->display_options['cache']['output_lifespan'] = '3600';
+  $handler->display->display_options['cache']['output_lifespan_custom'] = '0';
   $handler->display->display_options['query']['type'] = 'views_query';
   $handler->display->display_options['exposed_form']['type'] = 'basic';
   $handler->display->display_options['pager']['type'] = 'full';
@@ -131,12 +135,10 @@ function icor_defaults_views_default_views() {
   $handler->display->display_options['filters']['type']['id'] = 'type';
   $handler->display->display_options['filters']['type']['table'] = 'node';
   $handler->display->display_options['filters']['type']['field'] = 'type';
+  $handler->display->display_options['filters']['type']['operator'] = 'not in';
   $handler->display->display_options['filters']['type']['value'] = array(
-    'icor_interactive_player' => 'icor_interactive_player',
-    'h5p_content' => 'h5p_content',
-    'poll' => 'poll',
-    'timeline' => 'timeline',
-    'timeline_date' => 'timeline_date',
+    'cis_course' => 'cis_course',
+    'section' => 'section',
   );
   /* Filter criterion: Content: Type */
   $handler->display->display_options['filters']['type_1']['id'] = 'type_1';
@@ -144,7 +146,9 @@ function icor_defaults_views_default_views() {
   $handler->display->display_options['filters']['type_1']['field'] = 'type';
   $handler->display->display_options['filters']['type_1']['value'] = array(
     'icor_interactive_player' => 'icor_interactive_player',
-    'h5p_content' => 'h5p_content',
+    'jmol' => 'jmol',
+    'map' => 'map',
+    'map_point' => 'map_point',
     'poll' => 'poll',
     'timeline' => 'timeline',
     'timeline_date' => 'timeline_date',
@@ -157,26 +161,27 @@ function icor_defaults_views_default_views() {
   $handler->display->display_options['filters']['type_1']['expose']['remember_roles'] = array(
     2 => '2',
     1 => 0,
-    5 => 0,
-    3 => 0,
-    7 => 0,
-    8 => 0,
-    4 => 0,
-    9 => 0,
-    6 => 0,
-    10 => 0,
+    6065076 => 0,
+    135574917 => 0,
+    66784200 => 0,
+    67296478 => 0,
+    75987638 => 0,
+    166149871 => 0,
+    30037204 => 0,
+    76550217 => 0,
   );
   $handler->display->display_options['filters']['type_1']['expose']['reduce'] = TRUE;
 
   /* Display: Page */
   $handler = $view->new_display('page', 'Page', 'page');
+  $handler->display->display_options['exposed_block'] = TRUE;
   $handler->display->display_options['defaults']['arguments'] = FALSE;
   $handler->display->display_options['path'] = 'icor-object-lists';
   $handler->display->display_options['menu']['type'] = 'normal';
   $handler->display->display_options['menu']['title'] = 'Object list';
   $handler->display->display_options['menu']['description'] = 'listing of allmavailable instructional objects';
   $handler->display->display_options['menu']['weight'] = '0';
-  $handler->display->display_options['menu']['name'] = 'menu-icor-navigation';
+  $handler->display->display_options['menu']['name'] = 'menu-elmsln-navigation';
   $handler->display->display_options['menu']['context'] = 0;
 
   /* Display: Entity Reference View Widget */

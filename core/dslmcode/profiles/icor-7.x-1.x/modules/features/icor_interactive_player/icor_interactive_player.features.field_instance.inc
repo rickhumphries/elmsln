@@ -10,7 +10,7 @@
 function icor_interactive_player_field_default_field_instances() {
   $field_instances = array();
 
-  // Exported field_instance: 'node-icor_interactive_player-body'
+  // Exported field_instance: 'node-icor_interactive_player-body'.
   $field_instances['node-icor_interactive_player-body'] = array(
     'bundle' => 'icor_interactive_player',
     'default_value' => NULL,
@@ -68,7 +68,7 @@ function icor_interactive_player_field_default_field_instances() {
   );
 
   // Exported field_instance:
-  // 'node-icor_interactive_player-field_cis_course_ref'
+  // 'node-icor_interactive_player-field_cis_course_ref'.
   $field_instances['node-icor_interactive_player-field_cis_course_ref'] = array(
     'bundle' => 'icor_interactive_player',
     'default_value' => NULL,
@@ -128,7 +128,6 @@ function icor_interactive_player_field_default_field_instances() {
           'action_on_edit' => 0,
           'fallback' => 'none',
           'providers' => array(
-            'og_context' => 1,
             'url' => 1,
           ),
           'skip_perm' => 0,
@@ -140,15 +139,13 @@ function icor_interactive_player_field_default_field_instances() {
     'widget' => array(
       'active' => 1,
       'module' => 'options',
-      'settings' => array(
-        'apply_chosen' => 1,
-      ),
+      'settings' => array(),
       'type' => 'options_select',
-      'weight' => 1,
+      'weight' => 0,
     ),
   );
 
-  // Exported field_instance: 'node-icor_interactive_player-field_items'
+  // Exported field_instance: 'node-icor_interactive_player-field_items'.
   $field_instances['node-icor_interactive_player-field_items'] = array(
     'bundle' => 'icor_interactive_player',
     'deleted' => 0,

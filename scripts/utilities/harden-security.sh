@@ -82,15 +82,48 @@ for i in $(find $configsdir/stacks/*/sites/*/*/files -maxdepth 0 -type d); do
   chown $wwwuser:$webgroup $i -v
   chmod 2774 $i -v
 done
+# GRAVCMS!!
+for i in $(find $configsdir/stacks/*/user -maxdepth 0 -type d); do
+  chown -R $wwwuser:$webgroup $i
+  chown $wwwuser:$webgroup $i -v
+  chmod 2774 $i -v
+done
+for i in $(find $configsdir/stacks/*/tmp -maxdepth 0 -type d); do
+  chown -R $wwwuser:$webgroup $i
+  chown $wwwuser:$webgroup $i -v
+  chmod 2774 $i -v
+done
+for i in $(find $configsdir/stacks/*/logs -maxdepth 0 -type d); do
+  chown -R $wwwuser:$webgroup $i
+  chown $wwwuser:$webgroup $i -v
+  chmod 2774 $i -v
+done
+for i in $(find $configsdir/stacks/*/backup -maxdepth 0 -type d); do
+  chown -R $wwwuser:$webgroup $i
+  chown $wwwuser:$webgroup $i -v
+  chmod 2774 $i -v
+done
+for i in $(find $configsdir/stacks/*/cache -maxdepth 0 -type d); do
+  chown -R $wwwuser:$webgroup $i
+  chown $wwwuser:$webgroup $i -v
+  chmod 2774 $i -v
+done
 
 # much easier things to target :)
-# ensure script settings are secure and READ ONLY, NEVER globally
+# ensure script settings are secure and READ ONLY
 chown $owner:$webgroup "$configsdir/scripts/drush-create-site/config.cfg" -v
 chmod 0444 "$configsdir/scripts/drush-create-site/config.cfg" -v
+# ensure password settings are more secure then config, not global readable
+chown $owner:$webgroup "$configsdir/scripts/drush-create-site/configpwd.cfg" -v
+chmod 0440 "$configsdir/scripts/drush-create-site/configpwd.cfg" -v
 # set web server perms correctly for private files
 chown -R $wwwuser:$webgroup "$drupal_priv"
 chown $wwwuser:$webgroup "$drupal_priv" -v
 chmod 2774 "$drupal_priv" -v
+# set web server perms correctly for tmp files
+chown -R $wwwuser:$webgroup "$configsdir/tmp"
+chown $wwwuser:$webgroup "$configsdir/tmp" -v
+chmod 2774 "$configsdir/tmp" -v
 # set web server perms correctly for jobs
 chown -R $wwwuser:$webgroup "$configsdir/jobs"
 chown $wwwuser:$webgroup "$configsdir/jobs" -v
@@ -101,6 +134,3 @@ if [ ! -d "$configsdir/logs" ]; then
 fi
 chown -R $owner:$webgroup "$configsdir/logs"
 chmod 2770 "$configsdir/logs" -v
-# ensure piwik is happy too
-chown -R $wwwuser:$wwwuser "$configsdir/_nondrupal/piwik"
-chmod -R 0755 "$configsdir/_nondrupal/piwik" -v

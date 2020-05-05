@@ -1,0 +1,507 @@
+<?php
+
+/**
+ * @file
+ * VBO action to perform search and replace on entity fields.
+ *
+ * This module is modelled after the "modify entity fields" action included
+ * with VBO (views_bulk_operations/actions/modify.action.inc)
+ *
+ * Currently only supports text fields and properties.
+ */
+
+require_once drupal_get_path('module', 'vbo_search_and_replace') . '/includes/vbo_search_and_replace.inc';
+
+/**
+ * Implements hook_permission().
+ */
+function vbo_search_and_replace_permission() {
+  return array(
+    'vbo search and replace use regular expressions' => array(
+      'title' => t('Use regular expressions'),
+      'description' => t('Use a regular expresion to perform a search and replace.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_action_info().
+ */
+function vbo_search_and_replace_action_info() {
+  return array(
+    'vbo_search_and_replace_action' => array(
+      'type' => 'entity',
+      'label' => t('Search and replace on Entity values'),
+      'behavior' => array('changes_property'),
+      // This action only works when invoked through VBO. That's why it's
+      // declared as non-configurable to prevent it from being shown in the
+      // "Create an advanced action" dropdown on admin/config/system/actions.
+      'configurable' => FALSE,
+      'vbo_configurable' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Action function.
+ *
+ * Goes through new values and uses them to modify the passed entity by either
+ * replacing the existing values, or appending to them (based on user input).
+ */
+function vbo_search_and_replace_action($entity, $context) {
+  $settings = $context['search_and_replace_settings'];
+
+  $entity_type = $context['entity_type'];
+  $entity_title = entity_label($entity_type, $entity);
+  $entity_info = entity_get_info($entity_type);
+  $bundle_name = $entity->{$entity_info['entity keys']['bundle']};
+  $entity_label = $entity_info['bundles'][$bundle_name]['label'];
+  $replacements = array('%entity_title' => $entity_title, '@entity_label' => $entity_label);
+
+  $changed = FALSE;
+
+  if (!empty($context['selected']['properties'])) {
+    foreach ($context['selected']['properties'] as $property_name) {
+      if (property_exists($entity, $property_name)) {
+        $replaced = _vbo_search_and_replace_search_and_replace($settings['search'], $settings['replace'], $entity->{$property_name}, $settings);
+        $replacements['%property_label'] = $property_name;
+
+        if ($entity->{$property_name} !== $replaced) {
+          $replacements['@old'] = $entity->{$property_name};
+          $replacements['@new'] = $entity->{$property_name} = $replaced;
+          $changed = TRUE;
+          drupal_set_message(t('Property %property_label in @entity_label %entity_title changed <strong>from</strong>:<br> "@old"<br> <strong>to</strong>:<br> "@new"', $replacements));
+        }
+        else {
+          drupal_set_message(t('Property %property_label in @entity_label %entity_title skipped', $replacements));
+        }
+      }
+    }
+  }
+
+  if (!empty($context['selected']['bundle_' . $bundle_name])) {
+    foreach ($context['selected']['bundle_' . $bundle_name] as $field_name) {
+      if (property_exists($entity, $field_name)) {
+        $langcode = field_language($entity_type, $entity, $field_name);
+
+        if ($entity->$field_name && isset($entity->{$field_name}[$langcode])) {
+          foreach ($entity->{$field_name}[$langcode] as $delta => $value) {
+            $replaced = _vbo_search_and_replace_search_and_replace($settings['search'], $settings['replace'], $entity->{$field_name}[$langcode][$delta]['value'], $settings);
+            $field_info = field_info_instance($entity_type, $field_name, $bundle_name);
+            $replacements['%field_label'] = $field_info['label'];
+
+            if ($entity->{$field_name}[$langcode][$delta]['value'] !== $replaced) {
+              $replacements['@old'] = $entity->{$field_name}[$langcode][$delta]['value'];
+              $replacements['@new'] = $entity->{$field_name}[$langcode][$delta]['value'] = $replaced;
+              $changed = TRUE;
+              drupal_set_message(t('Field %field_label in @entity_label %entity_title changed <strong>from</strong>:<br> "@old"<br> <strong>to</strong>:<br> "@new"', $replacements));
+            }
+            else {
+              drupal_set_message(t('Field %field_label in @entity_label %entity_title skipped', $replacements));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if ($changed) {
+    entity_save($entity_type, $entity);
+  }
+}
+
+/**
+ * Action form function.
+ *
+ * Displays a checkbox for each property.
+ */
+function vbo_search_and_replace_action_form($context, &$form_state) {
+  if (!isset($context['settings'])) {
+    $context['settings'] = vbo_search_and_replace_action_views_bulk_operations_form_options();
+  }
+
+  $form_state['entity_type'] = $entity_type = $context['entity_type'];
+  $entity_info = entity_get_info($entity_type);
+  $properties = _vbo_search_and_replace_action_get_properties($entity_type, $context['settings']['display_values']);
+  $bundles = _views_bulk_operations_modify_action_get_bundles($entity_type, $context);
+
+  $form = array();
+
+  $form['#tree'] = TRUE;
+
+  $form['#attributes'] = array(
+    'class' => array('vbo-search-and-replace-form'),
+  );
+
+  if ($context['settings']['checkbox_columns']) {
+    $form['#attached']['css'] = array(
+      drupal_get_path('module', 'vbo_search_and_replace') . '/css/vbo_search_and_replace.checkbox_columns.css',
+    );
+  }
+
+  if (!empty($properties)) {
+    $form['properties'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Properties'),
+      '#attributes' => array('class' => array('field-select-container')),
+      '#suffix' => '<div class="clearfix"></div>',
+    );
+
+    foreach ($properties as $property_name => $property) {
+      $form['properties'][$property_name] = array(
+        '#type' => 'checkbox',
+        '#title' => $property['label'],
+        '#states' => _vbo_search_and_replace_select_all_states('properties[select_all]'),
+      );
+    }
+
+    $form['properties']['select_all'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('<strong>Select All</strong>'),
+    );
+  }
+
+  foreach ($bundles as $bundle_name => $bundle) {
+    $bundle_key = $entity_info['entity keys']['bundle'];
+
+    $form['bundles'][$bundle_name] = array(
+      '#type' => 'value',
+      '#value' => $bundle_name,
+    );
+
+    $default_values = array();
+
+    if (!empty($bundle_key)) {
+      $default_values[$bundle_key] = $bundle_name;
+    }
+
+    // Show the more detailed label only if the entity type has multiple
+    // bundles. Otherwise, it would just be confusing.
+    if (count($entity_info['bundles']) > 1) {
+      $label = t('Fields for @bundle_key @label', array(
+        '@bundle_key' => $bundle_key,
+        '@label' => $bundle['label'],
+      ));
+    }
+    else {
+      $label = t('Fields');
+    }
+
+    // Group fields into a fieldset for each bundle.
+    $form_key = 'bundle_' . $bundle_name;
+
+    $form[$form_key] = array(
+      '#type' => 'fieldset',
+      '#title' => $label,
+      '#parents' => array($form_key),
+      '#attributes' => array('class' => array('field-select-container')),
+    );
+
+    $display_values = $context['settings']['display_values'];
+    $instances = field_info_instances($entity_type, $bundle_name);
+
+    foreach ($instances as $field_name => $field_info) {
+      // Only work on text fields.
+      if ($field_info['widget']['module'] === 'text') {
+        // Skip fields if it's configured to be skipped.
+        if (!empty($display_values[VBO_MODIFY_ACTION_ALL]) || !empty($display_values[$bundle_name . '::' . $field_name])) {
+          $form[$form_key][$field_name] = array(
+            '#type' => 'checkbox',
+            '#title' => $field_info['label'],
+            '#states' => _vbo_search_and_replace_select_all_states($form_key . '[select_all]'),
+          );
+        }
+      }
+    }
+
+    $bundle_elements = element_get_visible_children($form[$form_key]);
+
+    if (empty($bundle_elements)) {
+      // Remove the bundle fieldset if no valid fields are available.
+      unset($form[$form_key]);
+    }
+    else {
+      if (count($bundle_elements) > 1) {
+        // Add "select all" option if there is more than one field available.
+        $form[$form_key]['select_all'] = array(
+          '#type' => 'checkbox',
+          '#title' => t('<strong>Select All</strong>'),
+        );
+      }
+
+      if (!$context['settings']['checkbox_columns']) {
+        $form[$form_key]['show_value']['#suffix'] = '<div class="clearfix"></div>';
+        $form[$form_key]['show_value']['#weight'] = -1;
+      }
+    }
+  }
+
+  // If the form has only one group (for example, "Properties"), remove the
+  // title and the fieldset, since there's no need to visually group values.
+  $form_elements = element_get_visible_children($form);
+
+  if (count($form_elements) == 1) {
+    $element_key = reset($form_elements);
+
+    unset($form[$element_key]['#type']);
+    unset($form[$element_key]['#title']);
+
+    // Get a list of all elements in the group, and filter out the non-values.
+    $values = element_get_visible_children($form[$element_key]);
+
+    foreach ($values as $index => $key) {
+      if ($key === 'show_value' || substr($key, 0, 1) === '_') {
+        unset($values[$index]);
+      }
+    }
+  }
+
+  $form['search'] = array(
+    '#title' => t('Search'),
+    '#type' => 'textarea',
+    '#description' => t('The search string that will be replaced.'),
+    '#required' => TRUE,
+  );
+
+  $form['replace'] = array(
+    '#title' => t('Replace'),
+    '#type' => 'textarea',
+    '#description' => t('The replacement string. The search string will be replaced with this.'),
+  );
+
+  $form['advanced'] = array(
+    '#title' => t('Advanced Options'),
+    '#type' => 'fieldset',
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#attributes' => array('class' => array('search-and-replace-advanced-options')),
+  );
+
+  $details  = '<p>' . t('Enhanced searches can be performed by specifying a prefix and a suffix for the search string. Only results that match the prefix, the search string and the suffix will be affected, however, only the search string will be replaced.') . '</p>';
+  $details .= t('<strong>Example:</strong><br>');
+  $details .= '<ul>';
+  $details .= '  <li>' . t('<em>Search</em>: "brown"') . '</li>';
+  $details .= '  <li>' . t('<em>Replacement</em>: "yellow"') . '</li>';
+  $details .= '</ul>';
+  $details .= '<p>' . t('Using the above parameters, all the instances of "brown" will be changed to "yellow".') . '</p>';
+  $details .= t('<strong>Example:</strong><br>');
+  $details .= '<ul>';
+  $details .= '  <li>' . t('<em>Prefix</em>: "the quick "') . '</li>';
+  $details .= '  <li>' . t('<em>Search</em>: "brown"') . '</li>';
+  $details .= '  <li>' . t('<em>Suffix</em>: " fox"') . '</li>';
+  $details .= '  <li>' . t('<em>Replacement</em>: "yellow"') . '</li>';
+  $details .= '</ul>';
+  $details .= '<p>' . t('Using the above parameters, "brown" will only be replaced with "yellow" if it is wrapped in the prefix and suffix. So, "the quick brown fox" will become to "the quick yellow fox".') . '</p>';
+  $details .= '<p>' . t('A more advanced form of enhanced search and replace takes advantage of regular expressions. This option is the most powerful but also offers the most opportunity for error. <strong>It is recommended that you test your regular expression thoroughly on a development copy of your site, and perform a backup before running in production.</strong>') . '</p>';
+
+  $form['advanced']['details'] = array(
+    '#markup' => $details,
+    '#prefix' => '<div class="description">',
+    '#suffix' => '</div>',
+  );
+
+  $form['advanced']['search_prefix'] = array(
+    '#title' => t('Search Prefix'),
+    '#type' => 'textfield',
+    '#description' => t('The string that search string must be immediately preceeded by in order for a match to be made.'),
+    '#states' => array(
+      'invisible' => array(
+        ':input[name="advanced[regular_expression]"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['advanced']['search_suffix'] = array(
+    '#title' => t('Search Suffix'),
+    '#type' => 'textfield',
+    '#description' => t('The string that the search string must be immediately followed by in order for a match to be made.'),
+    '#states' => array(
+      'invisible' => array(
+        ':input[name="advanced[regular_expression]"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['advanced']['case_sensitive'] = array(
+    '#title' => t('Case Sensitive'),
+    '#type' => 'checkbox',
+    '#default_value' => 0,
+    '#description' => t('Whether or not the search should be case sensitive.'),
+    '#states' => array(
+      'invisible' => array(
+        ':input[name="advanced[regular_expression]"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['advanced']['exact_match'] = array(
+    '#title' => t('Exact Match'),
+    '#type' => 'checkbox',
+    '#default_value' => 0,
+    '#description' => t('Check this if the entire field must match the search parameters including the prefix and suffix.'),
+    '#states' => array(
+      'invisible' => array(
+        ':input[name="advanced[regular_expression]"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['advanced']['regular_expression'] = array(
+    '#title' => t('Regular Expression'),
+    '#type' => 'checkbox',
+    '#default_value' => 0,
+    '#description' => t('Check this to perform a search and replace using a regular expression. <strong>CAUTION: This option will override and ignore all other options, including case-sensitivity.</strong>'),
+    '#access' => user_access('vbo search and replace use regular expressions'),
+  );
+
+  return $form;
+}
+
+/**
+ * Action form validate function.
+ *
+ * Checks that the user selected at least one value to modify, validates
+ * properties and calls Field API to validate fields for each bundle.
+ */
+function vbo_search_and_replace_action_validate($form, &$form_state) {
+  $search = array('properties');
+
+  foreach ($form_state['values']['bundles'] as $bundle_name) {
+    $search[] = 'bundle_' . $bundle_name;
+  }
+
+  $has_selected = FALSE;
+
+  foreach ($search as $group) {
+    $form_state['selected'][$group] = array();
+
+    if (isset($form_state['values'][$group])) {
+      $select_all = FALSE;
+
+      if (!empty($form_state['values'][$group]['select_all'])) {
+        $select_all = TRUE;
+        unset($form_state['values'][$group]['select_all']);
+      }
+
+      foreach ($form_state['values'][$group] as $key => $value) {
+        if ($value || $select_all) {
+          $has_selected = TRUE;
+          $form_state['selected'][$group][] = $key;
+        }
+      }
+
+      unset($form_state['values'][$group]);
+    }
+  }
+
+  if (!$has_selected) {
+    form_set_error('vbo_search_and_replace', t('You must select at least one property / field to perform a search and replace on.'));
+  }
+
+  // Do not allow the user to attempt a regular expression search and replace
+  // using the "e" pattern modifier. This modifier allows for arbitrary code
+  // execution in PHP < 7.0.
+  if ($form_state['values']['advanced']['regular_expression'] == 1 && PHP_VERSION_ID < 70000) {
+    if (_vbo_search_and_replace_pattern_has_exploitable_e_modifier($form_state['values']['search'])) {
+      form_set_error('vbo_seach_and_replace', t('Use of regular expressions with the insecure "e" pattern modifier is forbidden.'));
+    }
+  }
+}
+
+/**
+ * Action form submit function.
+ *
+ * Fills each constructed entity with property and field values, then
+ * passes them to views_bulk_operations_modify_action().
+ */
+function vbo_search_and_replace_action_submit($form, &$form_state) {
+  $settings = array(
+    'search' => $form_state['values']['search'],
+    'replace' => $form_state['values']['replace'],
+  );
+
+  $settings += $form_state['values']['advanced'];
+
+  $settings['regular_expression'] = isset($settings['regular_expression']) ? $settings['regular_expression'] : '';
+  $settings['search_prefix'] = isset($settings['search_prefix']) ? $settings['search_prefix'] : '';
+  $settings['search_suffix'] = isset($settings['search_suffix']) ? $settings['search_suffix'] : '';
+  $settings['exact_match'] = isset($settings['exact_match']) ? $settings['exact_match'] : '';
+  $settings['case_sensitive'] = isset($settings['case_sensitive']) ? $settings['case_sensitive'] : '';
+
+  return array(
+    'selected' => $form_state['selected'],
+    'bundles' => $form_state['values']['bundles'],
+    'search_and_replace_settings' => $settings,
+    'properties' => isset($form_state['values']['properties']) ? $form_state['values']['properties'] : array(),
+  );
+}
+
+/**
+ * The settings form for this action.
+ *
+ * This is the settings form on the field configuration page within views.
+ */
+function vbo_search_and_replace_action_views_bulk_operations_form($options, $entity_type, $dom_id) {
+  if (empty($options)) {
+    $options = vbo_search_and_replace_action_views_bulk_operations_form_options();
+  }
+
+  $entity_info = entity_get_info($entity_type);
+  $properties = _vbo_search_and_replace_action_get_properties($entity_type);
+  $values = array(
+    VBO_MODIFY_ACTION_ALL => t('- All -'),
+  );
+
+  foreach ($properties as $key => $property) {
+    $label = t('Properties');
+    $values[$label][$key] = $property['label'];
+  }
+
+  foreach ($entity_info['bundles'] as $bundle_name => $bundle) {
+    $bundle_key = $entity_info['entity keys']['bundle'];
+    // Show the more detailed label only if the entity type has multiple
+    // bundles.  Otherwise, it would just be confusing.
+    if (count($entity_info['bundles']) > 1) {
+      $label = t('Fields for @bundle_key @label', array('@bundle_key' => $bundle_key, '@label' => $bundle['label']));
+    }
+    else {
+      $label = t('Fields');
+    }
+
+    $instances = field_info_instances($entity_type, $bundle_name);
+
+    foreach ($instances as $field_name => $field_info) {
+      if ($field_info['widget']['module'] === 'text') {
+        $values[$label][$bundle_name . '::' . $field_name] = $field_info['label'];
+      }
+    }
+  }
+
+  $form['checkbox_columns'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Display checkboxes inline'),
+    '#description' => t('Display search field selection checkboxes in columns.'),
+    '#default_value' => $options['checkbox_columns'],
+  );
+
+  $form['display_values'] = array(
+    '#type' => 'select',
+    '#title' => t('Display values'),
+    '#options' => $values,
+    '#multiple' => TRUE,
+    '#description' => t('Select which values the action form should present to the user.'),
+    '#default_value' => $options['display_values'],
+  );
+
+  return $form;
+}
+
+/**
+ * Default values for the settings form.
+ */
+function vbo_search_and_replace_action_views_bulk_operations_form_options() {
+  $options['display_values'] = array(VBO_MODIFY_ACTION_ALL);
+  $options['checkbox_columns'] = FALSE;
+
+  return $options;
+}

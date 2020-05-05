@@ -1,0 +1,36 @@
+<?php
+/**
+ * @file
+ * Code for the ELMSMedia external video feature.
+ */
+
+include_once 'elmsmedia_external_video.features.inc';
+
+
+/**
+ * Implements hook_node_presave().
+ */
+function elmsmedia_external_video_node_presave($node) {
+  if ($node->type == 'external_video') {
+    $video_data = unserialize($node->field_external_media['und'][0]['video_data']);
+    if (in_array('youtube', $video_data)) {
+      // check for bad links and convert to good ones
+      if (strpos($node->field_external_media['und'][0]['video_url'], 'youtu.be')) {
+        $tmp = explode('/', $node->field_external_media['und'][0]['video_url']);
+        $id = array_pop($tmp);
+        $node->field_external_media['und'][0]['video_url'] = 'https://www.youtube.com/watch?v=' . $id;
+      }
+      // load the video and get the duration from the URL
+      $request = _cis_connector_request($node->field_external_media['und'][0]['video_url'], array('max_redirects' => 5), 'none', TRUE);
+      $data = $request->data;
+      $preg = '/"length_seconds"\:(.*?),/s';
+      // preg match the length that's hidden in the JS
+      preg_match_all($preg, $data, $results);
+      // clean it up if we have results
+      if (isset($results[1][0])) {
+        $video_data['duration'] = str_replace('"', '', str_replace("'", '', $results[1][0]));
+        $node->field_external_media['und'][0]['video_data'] = serialize($video_data);
+      }
+    }
+  }
+}

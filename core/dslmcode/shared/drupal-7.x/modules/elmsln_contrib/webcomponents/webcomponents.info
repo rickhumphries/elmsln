@@ -1,0 +1,11 @@
+name = Web components
+description = Provides support for webcomponents to ingest static templates into reusable layout systems.
+core = 7.x
+package = Webcomponents
+dependencies[] = entity
+dependencies[] = libraries
+; Information added by Drupal.org packaging script on 2020-04-27
+version = "7.x-3.9"
+core = "7.x"
+project = "webcomponents"
+datestamp = "1588020549"

@@ -11,8 +11,8 @@
 function wysiwyg_epiceditor_editor() {
   $editor['epiceditor'] = array(
     'title' => 'EpicEditor',
-    'vendor url' => 'http://epiceditor.com',
-    'download url' => 'http://epiceditor.com',
+    'vendor url' => 'https://github.com/OscarGodson/EpicEditor',
+    'download url' => 'https://github.com/OscarGodson/EpicEditor/releases/',
     'libraries' => array(
       '' => array(
         'title' => 'Minified',
@@ -23,6 +23,7 @@ function wysiwyg_epiceditor_editor() {
         'files' => array('js/epiceditor.js'),
       ),
     ),
+    'verified version range' => array('0.1.1', '0.2.2'),
     'version callback' => 'wysiwyg_epiceditor_version',
     'themes callback' => 'wysiwyg_epiceditor_themes',
     'settings form callback' => 'wysiwyg_epiceditor_settings_form',
@@ -45,14 +46,19 @@ function wysiwyg_epiceditor_editor() {
  * @return
  *   The installed editor version.
  */
-function wysiwyg_epiceditor_version($editor) {
+function wysiwyg_epiceditor_version(&$editor) {
   $library = $editor['library path'] . '/js/epiceditor.js';
   if (!file_exists($library)) {
-    return;
+    $library = $editor['library path'] . '/epiceditor/js/epiceditor.js';
+    if (!file_exists($library)) {
+      return;
+    }
+    $editor['library path'] .= '/epiceditor';
+    $editor['editor path'] .= '/epiceditor';
   }
   // @todo Do not load the entire file; use fgets() instead.
   $library = file_get_contents($library, 'r');
-  $version = preg_match('%EpicEditor\.version = \'(.*)\'\;%', $library, $matches);
+  preg_match('%EpicEditor\.version = \'(.*)\'\;%', $library, $matches);
   if (!isset($matches[1])) {
     return;
   }
@@ -72,9 +78,7 @@ function wysiwyg_epiceditor_version($editor) {
  *   theme name.
  */
 function wysiwyg_epiceditor_themes($editor, $profile) {
-  return array('epic-dark', 'epic-light');
-  // @todo Use the preview themes somewhere.
-  //return array('preview-dark', 'github');
+  return array('epic-light', 'epic-dark');
 }
 
 /**
@@ -106,7 +110,7 @@ function wysiwyg_epiceditor_settings($editor, $config, $theme) {
     'basePath' => base_path() . $editor['library path'],
     'clientSideStorage' => FALSE,
     'theme' => $theme,
-    //'preview_theme' => '',
+    'preview_theme' => 'github',
   );
   return $settings;
 }

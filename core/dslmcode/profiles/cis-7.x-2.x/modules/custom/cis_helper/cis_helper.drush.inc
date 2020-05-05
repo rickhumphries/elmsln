@@ -39,8 +39,8 @@ function cis_helper_drush_command() {
     'examples' => array(
       'drush cis-release-kraken' =>
         'Add service instances to all known courses in system',
-      'drush cis-kraken --outline_import --build_service=course' =>
-        'Add service instances to all known courses in system, attempt outline importing, only building the "course" instance.',
+      'drush cis-kraken --outline_import --build_service=courses' =>
+        'Add service instances to all known courses in system, attempt outline importing, only building the "courses" instance.',
     ),
   );
   $items['cis-sync-registry'] = array(
@@ -50,6 +50,18 @@ function cis_helper_drush_command() {
     'examples' => array(
       'drush cis-sync-reg' =>
         'Add service nodes to match their registry counterparts. If there is a match on machine_name then update associated fields in CIS to match registry.',
+    ),
+  );
+  $items['cis-sync-roster'] = array(
+    'description' => dt('Sync course rosters'),
+    'aliases' => array('sync-roster'),
+    'arguments' => array(
+      'machine_name' => dt("Course machine name to sync to do just 1 course"),
+    ),
+    'options' => array(),
+    'examples' => array(
+      'drush sync-roster' =>
+        'Sync\'s the roster for all courses.',
     ),
   );
   return $items;
@@ -66,6 +78,34 @@ function cis_helper_drush_help($section) {
       return dt('Produce a "kraken" that will hit and force the production of every course into all instances, good for initial population and testing.');
     case 'drush:cis-sync-registry':
       return dt('Create and update Service nodes in CIS to match what is available in the cis registry of connections.');
+    case 'drush:sync-roster':
+      return dt('Sync all or an individual course roster.');
+  }
+}
+
+/**
+ * Drush command callback for cis-sync-registry.
+ */
+function drush_cis_helper_cis_sync_roster($machine_name = NULL) {
+  // simple case, fire all the things!
+  if (is_null($machine_name)) {
+    _cis_helper_sync_network();
+  }
+  else {
+    // sync a single course based on its machine name
+    $request = array(
+      'method' => 'POST',
+      'api' => '1',
+      'bucket' => 'cis',
+      'path' => '/',
+      'data' => array(
+        'elmsln_module' => 'cis_helper',
+        'elmsln_callback' => 'populate_course_network',
+        'course' => $machine_name,
+        'staff' => _cis_helper_get_staff(),
+      ),
+    );
+    _elmsln_api_request($request, TRUE);
   }
 }
 
@@ -78,14 +118,7 @@ function drush_cis_helper_cis_sync_registry() {
   $registry = _cis_connector_build_registry();
   foreach ($registry as $distribution => $reg) {
     // if it is set in CIS, load the node then update it
-    if (isset($services[$distribution])) {
-      // load this service node and update it if fields are set
-      $service = node_load($services[$distribution]);
-      $service->field_location['und'][0]['url'] = $reg['protocol'] . '://' . $reg['address'];
-      $service->field_data_location['und'][0]['url'] = $reg['protocol'] . '://' . $reg['service_address'];
-      node_save($service);
-    }
-    else {
+    if (!isset($services[$distribution])) {
       // make sure we aren't told to ignore this service
       if (!isset($reg['ignore']) || !$reg['ignore']) {
         // produce a new service instance
@@ -107,6 +140,7 @@ function drush_cis_helper_cis_sync_registry() {
  * Drush command callback for cis-release-kraken.
  */
 function drush_cis_helper_cis_release_kraken() {
+  // load all courses
   $courses = _cis_connector_assemble_entity_list('node', 'course', 'field_machine_name', 'title');
   // load all services
   $services = _cis_connector_assemble_entity_list('node', 'service', 'field_machine_name', 'title');

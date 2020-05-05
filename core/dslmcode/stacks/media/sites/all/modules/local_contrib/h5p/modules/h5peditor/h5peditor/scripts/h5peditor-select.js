@@ -1,5 +1,4 @@
-var H5PEditor = H5PEditor || {};
-
+/* global ns*/
 H5PEditor.widgets.select = H5PEditor.Select = (function (E) {
   /**
    * Initialize a new widget.
@@ -14,6 +13,15 @@ H5PEditor.widgets.select = H5PEditor.Select = (function (E) {
     this.field = field;
     this.value = params;
     this.setValue = setValue;
+
+    // Setup event dispatching on change
+    this.changes = [];
+    this.triggerListeners = function (value) {
+      // Run callbacks
+      for (var i = 0; i < this.changes.length; i++) {
+        this.changes[i](value);
+      }
+    };
   }
 
   /**
@@ -34,6 +42,7 @@ H5PEditor.widgets.select = H5PEditor.Select = (function (E) {
       if (val !== false) {
         that.value = val;
         that.setValue(that.field, val);
+        that.triggerListeners(val);
       }
     });
   };
@@ -44,17 +53,40 @@ H5PEditor.widgets.select = H5PEditor.Select = (function (E) {
    * @returns {String} HTML.
    */
   C.prototype.createHtml = function () {
-    var options = E.createOption('-', '-');
-    for (var i = 0; i < this.field.options.length; i++) {
-      var option = this.field.options[i];
-      options += E.createOption(option.value, option.label, option.value === this.value);
+    var options = '';
+    if (this.field.optional === true || this.field.default === undefined) {
+      options = E.createOption('-', '-');
     }
+    options += C.createOptionsHtml(this.field.options, this.value);
 
-    var label = E.createLabel(this.field, '<select>' + options + '</select>');
+    var select = '<select class="h5peditor-select">' + options + '</select>';
 
-    return E.createItem(this.field.type, label, this.field.description);
+    return E.createFieldMarkup(this.field, select);
   };
 
+  /**
+   * Generate HTML for select options.
+   *
+   * @param {Array} options
+   * @param {string} selected value
+   * @return {string}
+   */
+  C.createOptionsHtml = function (options, selected) {
+    var html = '';
+
+    for (var i = 0; i < options.length; i++) {
+      if (options[i].type === 'optgroup') {
+        html += '<optgroup label="' + options[i].label + '" >';
+        html += C.createOptionsHtml(options[i].options, selected);
+        html += '</optgroup>';
+      }
+      else {
+        html += E.createOption(options[i].value, options[i].label, options[i].value === selected);
+      }
+    }
+
+    return html;
+  };
 
   /**
    * Validate this field.
@@ -69,7 +101,7 @@ H5PEditor.widgets.select = H5PEditor.Select = (function (E) {
 
     if (this.field.optional !== true && value === undefined) {
       // Not optional and no value selected, print required error
-      this.$errors.append(ns.createError(ns.t('core', 'requiredProperty', {':property': 'text field'})));
+      this.$errors.append(ns.createError(ns.t('core', 'requiredProperty', {':property': ns.t('core', 'textField')})));
 
       return false;
     }
@@ -82,7 +114,6 @@ H5PEditor.widgets.select = H5PEditor.Select = (function (E) {
 
     return value;
   };
-
 
   /**
    * Remove widget from DOM.

@@ -1,0 +1,17 @@
+<?php
+/**
+ * @file
+ * Code for the Assessment Quiz feature.
+ */
+
+include_once 'assessment_quiz.features.inc';
+
+
+/**
+ * Implements hook_admin_paths_alter().
+ */
+function assessment_quiz_admin_paths_alter(&$paths) {
+  // account for quiz module claiming these are admin paths when they aren't
+  unset($paths['node/*/quiz']);
+  unset($paths['node/*/quiz/*']);
+}

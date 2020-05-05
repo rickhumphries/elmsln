@@ -1,4 +1,5 @@
 <?php
+
 /**
  * @file
  * Extends Drupal's default database cache so async queries happen.
@@ -25,6 +26,16 @@ define('CACHE_BOOTSTRAP_PREFETCH', TRUE);
 define('APDQC_CALL_HOOK_ON_CLEAR', FALSE);
 
 /**
+ * If TRUE a union query will be used when prefetching cache bin data.
+ */
+define('APDQC_USE_UNION_QUERY', FALSE);
+
+/**
+ * Cache bins will be compressed. 1 serialized data, 2 all data.
+ */
+define('APDQC_CACHE_DEFAULT_COMPRESS', 0);
+
+/**
  * Prefetch data from a cache table.
  *
  * @param array $table_keys_cache_prefetch
@@ -38,10 +49,12 @@ define('APDQC_CALL_HOOK_ON_CLEAR', FALSE);
 function apdqc_run_prefetch_array(array $table_keys_cache_prefetch, $reap_on_next_get = TRUE, $log = TRUE) {
   static $use_async_data;
   if (!isset($use_async_data)) {
-    $do_not_use_async_data = &drupal_static(__FUNCTION__);
+    $do_not_run_prefetch_array = &drupal_static('apdqc_run_prefetch_array', array());
   }
-  if ($do_not_use_async_data) {
-    return;
+  foreach ($table_keys_cache_prefetch as $table => $cids) {
+    if (is_array($do_not_run_prefetch_array)&& array_key_exists($table, $do_not_run_prefetch_array) && !empty($do_not_run_prefetch_array[$table])) {
+      return;
+    }
   }
   if (defined('APDQC_PREFETCH')) {
     // Bail if apdqc_prefetch is disabled.
@@ -51,20 +64,15 @@ function apdqc_run_prefetch_array(array $table_keys_cache_prefetch, $reap_on_nex
   }
 
   // Process and run query.
-  $query = '';
-  $tables = array();
-  $all_cids = array();
+  $queries = array();
   foreach ($table_keys_cache_prefetch as $bin => $cids) {
     if (apdqc_get_bin_class_name($bin) !== 'APDQCache') {
       continue;
     }
-    $tables[] = $bin;
-    $all_cids = array_merge($all_cids, $cids);
-    // Use a union query if hitting mutiple cache bins.
-    if (!empty($query)) {
-      $query .= "\nUNION ALL ";
-    }
+    // Remove any duplicates or empty.
+    $cids = array_filter(array_unique($cids));
 
+    $query = '';
     if (isset($cids['*'])) {
       $query .= "SELECT '$bin' AS bin, cid, data, created, expire, serialized FROM " . apdqc_fast_prefix_tables('{' . apdqc_fast_escape_table($bin) . '}') . "";
       if (!empty($cids['*']) && is_array($cids['*'])) {
@@ -75,7 +83,7 @@ function apdqc_run_prefetch_array(array $table_keys_cache_prefetch, $reap_on_nex
     else {
       $like_ids = array();
       foreach ($cids as $key => $cid) {
-        if (strpos($cid, '%') !== FALSE) {
+        if (strpos($cid, ':%') !== FALSE) {
           unset($cids[$key]);
           $like_ids[] = $cid;
         }
@@ -105,11 +113,29 @@ function apdqc_run_prefetch_array(array $table_keys_cache_prefetch, $reap_on_nex
         }
       }
     }
+    $queries[] = array($query, $bin, $cids);
   }
 
   // Prefetch cache.
-  if (!empty($query)) {
+  if (variable_get('apdqc_use_union_query', APDQC_USE_UNION_QUERY)) {
+    $query = '';
+    $all_cids = array();
+    $tables = array();
+    foreach ($queries as $values) {
+      $tables[] = $values[1];
+      $all_cids = array_merge($all_cids, $values[2]);
+      // Use a union query if hitting mutiple cache bins.
+      if (!empty($query)) {
+        $query .= "\nUNION ALL ";
+      }
+      $query .= $values[0];
+    }
     apdqc_query($tables, $all_cids, $query, array('async' => TRUE, 'log' => $log));
+  }
+  else {
+    foreach ($queries as $values) {
+      apdqc_query(array($values[1]), $values[2], $values[0], array('async' => TRUE, 'log' => $log));
+    }
   }
 }
 
@@ -193,6 +219,37 @@ function apdqc_get_bin_class_name($bin) {
   return $cache_objects[$bin];
 }
 
+function apdqc_inflate_unserialize(&$cache) {
+  $converted = FALSE;
+  if (is_array($cache)) {
+    $cache = (object) $cache;
+    $converted = TRUE;
+  }
+  // If the data is compressed, uncompress it.
+  if ($cache->serialized > 1) {
+    $inflate = @gzinflate($cache->data);
+    if ($inflate !== FALSE && $cache->data !== FALSE) {
+      $cache->data = $inflate;
+    }
+    $cache->serialized -= 2;
+  }
+  // If the data is permanent or not subject to a minimum cache lifetime,
+  // unserialize and return the cached data.
+  if ($cache->serialized) {
+    $data = @unserialize($cache->data);
+    if ($cache->data === 'b:0;' || $data !== FALSE) {
+      $cache->data = $data;
+    }
+  }
+  if ($converted) {
+    $cache = (array) $cache;
+  }
+}
+
+if (!class_exists('DrupalDatabaseCache')) {
+  require_once(DRUPAL_ROOT . '/includes/cache.inc');
+}
+
 /**
  * A pretty darn quick cache implementation of Drupal's default cache backend.
  *
@@ -202,6 +259,8 @@ function apdqc_get_bin_class_name($bin) {
  * @see http://drupal.org/node/891600
  */
 class APDQCache extends DrupalDatabaseCache {
+
+  protected $compressed;
 
   /**
    * Constructs a DrupalDatabaseCache object.
@@ -216,7 +275,26 @@ class APDQCache extends DrupalDatabaseCache {
     if ($db_type === 'mysql' && defined('PHP_VERSION_ID') && PHP_VERSION_ID >= 50300) {
       require_once 'apdqc.mysql.inc';
     }
+
+    $this->compressed = $this->apdqcCacheCompressBin($bin);
     parent::__construct($bin);
+  }
+
+  /**
+   * Checks if this cache bin is compressed or not.
+   *
+   * @param string $bin
+   *   The cache bin name.
+   *
+   * @return bool
+   *   TRUE if this cache bin is compressed.
+   */
+  protected function apdqcCacheCompressBin($bin) {
+    $compress = variable_get('apdqc_cache_compress_' . $bin);
+    if (!isset($compress)) {
+      $compress = variable_get('apdqc_cache_default_compress', APDQC_CACHE_DEFAULT_COMPRESS);
+    }
+    return $compress;
   }
 
   /**
@@ -271,6 +349,7 @@ class APDQCache extends DrupalDatabaseCache {
         // circumstances, and is used here only due to the performance overhead
         // we would incur otherwise. When serving an uncached page, the overhead
         // of using db_select() is a much smaller proportion of the request.
+        // @codingStandardsIgnoreLine
         $result = db_query('SELECT cid, data, created, expire, serialized FROM {' . db_escape_table($this->bin) . '} WHERE cid IN (:cids)', array(':cids' => $cids));
       }
       else {
@@ -308,6 +387,41 @@ class APDQCache extends DrupalDatabaseCache {
       // return FALSE in order to allow exception handling to occur.
       return array();
     }
+  }
+
+  /**
+   * Prepares a cached item.
+   *
+   * Checks that items are either permanent or did not expire, and unserializes
+   * data as appropriate.
+   *
+   * @param object $cache
+   *   An item loaded from cache_get() or cache_get_multiple().
+   *
+   * @return mixed
+   *   The item with data unserialized as appropriate or FALSE if there is no
+   *   valid item to load.
+   */
+  protected function prepareItem($cache) {
+    if (!isset($cache->data)) {
+      return FALSE;
+    }
+    // If the cached data is temporary and subject to a per-user minimum
+    // lifetime, compare the cache entry timestamp with the user session
+    // cache_expiration timestamp. If the cache entry is too old, ignore it.
+    if ($cache->expire != CACHE_PERMANENT
+      && variable_get('cache_lifetime', 0)
+      && isset($_SESSION['cache_expiration'][$this->bin])
+      && $_SESSION['cache_expiration'][$this->bin] > $cache->created
+    ) {
+      // Ignore cache data that is too old and thus not valid for this user.
+      return FALSE;
+    }
+
+    // Inflate and unserialize data.
+    apdqc_inflate_unserialize($cache);
+
+    return $cache;
   }
 
   /**
@@ -408,7 +522,6 @@ class APDQCache extends DrupalDatabaseCache {
     }
   }
 
-
   /**
    * Cleans up the per-session cache expiration data.
    */
@@ -450,6 +563,15 @@ class APDQCache extends DrupalDatabaseCache {
       $fields['data'] = $data;
       $fields['serialized'] = 0;
     }
+    if ($this->compressed > 1
+      || ($this->compressed && $fields['serialized'])
+    ) {
+      $deflate = gzdeflate($fields['data'], 9);
+      if (strlen($deflate) < strlen($fields['data'])) {
+        $fields['data'] = $deflate;
+        $fields['serialized'] += 2;
+      }
+    }
 
     try {
       // Build query.
@@ -490,12 +612,15 @@ class APDQCache extends DrupalDatabaseCache {
 
     // Use default core logic for this cache clear if inside of a transaction.
     if (Database::getConnection()->inTransaction()) {
+
       // Do not use any prefectched data.
-      drupal_static_reset('apdqc_async_data');
+      $apdqc_async_data = &drupal_static('apdqc_async_data');
       $do_not_use_async_data = &drupal_static('apdqc_async_data_do_not_use_async');
-      $do_not_use_async_data = TRUE;
-      $do_not_use_async_data = &drupal_static('apdqc_run_prefetch_array');
-      $do_not_use_async_data = TRUE;
+      $do_not_run_prefetch_array = &drupal_static('apdqc_run_prefetch_array');
+      $apdqc_async_data[$this->bin] = array();
+      $do_not_use_async_data[$this->bin] = TRUE;
+      $do_not_run_prefetch_array[$this->bin] = TRUE;
+
       $output = parent::clear($cid, $wildcard);
       $this->callCacheClearHooks($cid, $wildcard);
       return $output;
@@ -663,9 +788,9 @@ class APDQCache extends DrupalDatabaseCache {
       $empty_table = $result->fetch_row();
     }
     if (empty($result) || empty($empty_table)) {
-      return FALSE;
+      return TRUE;
     }
-    return TRUE;
+    return FALSE;
   }
 
   /**

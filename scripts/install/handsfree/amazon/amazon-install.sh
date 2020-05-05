@@ -20,20 +20,22 @@ start="$(timestamp)"
 # make sure we're up to date
 yes | yum update
 # using yum to install the main packages
-yes | yum -y install curl uuid patch git nano gcc make mysql mysql-server httpd
+yes | yum -y install curl uuid patch git nano gcc make mysql55-server httpd24
 # amazon packages on 56
 yes | yum -y install php56 php56-common php56-opcache php56-fpm php56-pecl-apcu php56-cli php56-pdo php56-mysqlnd php56-gd php56-mbstring php56-mcrypt php56-xml php56-devel php56-pecl-ssh2 --skip-broken
-
+# docker
+yes | yum install -y docker docker-compose
+# developer tools
 yes | yum groupinstall 'Development Tools'
 pecl channel-update pecl.php.net
 
 # set httpd_can_sendmail so drupal mails go out
 setsebool -P httpd_can_sendmail on
 # start mysql to ensure that it is running
-/etc/init.d/mysqld restart
+# todo pass some stuff in here... cause it's weird for amazon.
+service mysqld restart
 
 #install varnish
-rpm --nosignature -i https://repo.varnish-cache.org/redhat/varnish-3.0.el6.rpm
 yum install varnish -y
 
 sed -i 's/VARNISH_LISTEN_PORT=6081/VARNISH_LISTEN_PORT=80/g' /etc/sysconfig/varnish
@@ -61,18 +63,33 @@ echo "opcache.validate_timestamps=1" >> /etc/php.d/10-opcache.ini
 echo "opcache.fast_shutdown=1" >> /etc/php.d/10-opcache.ini
 echo "opcache.interned_strings_buffer=8" >> /etc/php.d/10-opcache.ini
 echo "opcache.enable_cli=1" >> /etc/php.d/10-opcache.ini
-# remove default apc file that might exist
-yes | rm /etc/php.d/apc.ini
 
-/etc/init.d/httpd restart
+# Make sure apache knows what you are tyring to do with host files.
+echo IncludeOptional conf.sites.d/*.conf >> /etc/httpd/conf/httpd.conf
+echo 'ProxyTimeout 1800' >> /etc/httpd/conf/httpd.conf
+
+
 # make an admin group
 groupadd admin
 groupadd elmsln
+
 # run the handsfree installer that's the same for all deployments
 # kick off hands free deployment
-bash /var/www/elmsln/scripts/install/handsfree/handsfree-install.sh 1 $1 $2 $3 $3 $3 data- $4 $5 $5 elmsln $6
+bash /var/www/elmsln/scripts/install/handsfree/handsfree-install.sh 3 $1 $2 $3 $3 $3 data- $4 $5 $5 elmsln $6
 
-/etc/init.d/mysqld restart
+chkconfig mysqld on
+service mysqld restart
+
+## very smart of ami to have the php-fpm fallback already in place so you can just kill mod_php
+rm /etc/httpd/conf.modules.d/10-php.conf -rf
+
+#This needs to happen again after you remove mod_php
+chkconfig httpd on
+service httpd restart
+
+#Turn on php-fpm service
+chkconfig php-fpm on
+service php-fpm start
 
 cd $HOME
 source .bashrc

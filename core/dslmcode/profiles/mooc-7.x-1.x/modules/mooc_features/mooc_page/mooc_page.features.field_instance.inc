@@ -10,14 +10,8 @@
 function mooc_page_field_default_field_instances() {
   $field_instances = array();
 
-  // Exported field_instance: 'node-page-body'
+  // Exported field_instance: 'node-page-body'.
   $field_instances['node-page-body'] = array(
-    'accessibility_content' => 1,
-    'accessibility_content_block_submit' => array(
-      'moderate' => 0,
-      'severe' => 0,
-      'suggestion' => 0,
-    ),
     'bundle' => 'page',
     'default_value' => NULL,
     'deleted' => 0,
@@ -60,13 +54,17 @@ function mooc_page_field_default_field_instances() {
       ),
       'better_formats' => array(
         'allowed_formats' => array(
+          'git_book_markdown' => 0,
           'plain_text' => 0,
-          'textbook_editor' => 'textbook_editor',
+          'textbook_editor' => 0,
         ),
-        'allowed_formats_toggle' => 1,
+        'allowed_formats_toggle' => 0,
         'default_order_toggle' => 0,
         'default_order_wrapper' => array(
           'formats' => array(
+            'git_book_markdown' => array(
+              'weight' => 0,
+            ),
             'plain_text' => array(
               'weight' => 10,
             ),
@@ -84,7 +82,7 @@ function mooc_page_field_default_field_instances() {
       'active' => 1,
       'module' => 'text',
       'settings' => array(
-        'rows' => 20,
+        'rows' => 15,
         'summary_rows' => 5,
       ),
       'type' => 'text_textarea_with_summary',
@@ -92,7 +90,7 @@ function mooc_page_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-page-field_cis_tag'
+  // Exported field_instance: 'node-page-field_cis_tag'.
   $field_instances['node-page-field_cis_tag'] = array(
     'bundle' => 'page',
     'default_value' => NULL,
@@ -145,13 +143,90 @@ function mooc_page_field_default_field_instances() {
         'size' => 60,
       ),
       'type' => 'text_textfield',
-      'weight' => 16,
+      'weight' => 101,
+    ),
+  );
+
+  // Exported field_instance: 'node-page-field_elmsln_competency'.
+  $field_instances['node-page-field_elmsln_competency'] = array(
+    'bundle' => 'page',
+    'default_value' => NULL,
+    'deleted' => 0,
+    'description' => 'Does this item reflect achievement in pursuit of a course competency? Set this for critical events / learning objectives to send additional xAPI metadata for tracking student progression toward learning this competency.',
+    'display' => array(
+      'default' => array(
+        'label' => 'above',
+        'module' => 'text',
+        'settings' => array(),
+        'type' => 'text_default',
+        'weight' => 15,
+      ),
+      'teaser' => array(
+        'label' => 'above',
+        'settings' => array(),
+        'type' => 'hidden',
+        'weight' => 0,
+      ),
+    ),
+    'entity_type' => 'node',
+    'field_name' => 'field_elmsln_competency',
+    'label' => 'Competency',
+    'required' => 0,
+    'settings' => array(
+      'authcache' => array(
+        'clients' => array(
+          'authcache_ajax' => array(
+            'status' => 1,
+            'weight' => 0,
+          ),
+        ),
+        'fallback' => 'cancel',
+        'lifespan' => 3600,
+        'perpage' => 0,
+        'peruser' => 1,
+        'status' => 0,
+      ),
+      'better_formats' => array(
+        'allowed_formats' => array(
+          'git_book_markdown' => 'git_book_markdown',
+          'plain_text' => 'plain_text',
+          'textbook_editor' => 'textbook_editor',
+        ),
+        'allowed_formats_toggle' => 0,
+        'default_order_toggle' => 0,
+        'default_order_wrapper' => array(
+          'formats' => array(
+            'git_book_markdown' => array(
+              'weight' => 0,
+            ),
+            'plain_text' => array(
+              'weight' => 10,
+            ),
+            'textbook_editor' => array(
+              'weight' => -10,
+            ),
+          ),
+        ),
+      ),
+      'text_processing' => 0,
+      'user_register_form' => FALSE,
+    ),
+    'widget' => array(
+      'active' => 1,
+      'module' => 'text',
+      'settings' => array(
+        'size' => 60,
+      ),
+      'type' => 'text_textfield',
+      'weight' => 138,
     ),
   );
 
   // Translatables
   // Included for use with string extractors like potx.
   t('Body');
+  t('Competency');
+  t('Does this item reflect achievement in pursuit of a course competency? Set this for critical events / learning objectives to send additional xAPI metadata for tracking student progression toward learning this competency.');
   t('Unique tag');
 
   return $field_instances;

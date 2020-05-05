@@ -1,8 +1,5 @@
 <?php
 
-// Make sure apdqc_escape_string() is available.
-require_once 'apdqc.mysql.inc';
-
 /**
  * @file
  * User session handling functions.
@@ -19,58 +16,62 @@ require_once 'apdqc.mysql.inc';
  * data should instead be accessed via the $_SESSION superglobal.
  */
 
+// Make sure apdqc_escape_string() is available.
+require_once 'apdqc.mysql.inc';
+
 if (!function_exists('_drupal_session_open')) {
+
   /**
-  * Session handler assigned by session_set_save_handler().
-  *
-  * This function is used to handle any initialization, such as file paths or
-  * database connections, that is needed before accessing session data. Drupal
-  * does not need to initialize anything in this function.
-  *
-  * This function should not be called directly.
-  *
-  * @return bool
-  *   This function will always return TRUE.
-  */
+   * Session handler assigned by session_set_save_handler().
+   *
+   * This function is used to handle any initialization, such as file paths or
+   * database connections, that is needed before accessing session data. Drupal
+   * does not need to initialize anything in this function.
+   *
+   * This function should not be called directly.
+   *
+   * @return bool
+   *   This function will always return TRUE.
+   */
   function _drupal_session_open() {
     return TRUE;
   }
 
   /**
-  * Session handler assigned by session_set_save_handler().
-  *
-  * This function is used to close the current session. Because Drupal stores
-  * session data in the database immediately on write, this function does
-  * not need to do anything.
-  *
-  * This function should not be called directly.
-  *
-  * @return bool
-  *   This function will always return TRUE.
-  */
+   * Session handler assigned by session_set_save_handler().
+   *
+   * This function is used to close the current session. Because Drupal stores
+   * session data in the database immediately on write, this function does
+   * not need to do anything.
+   *
+   * This function should not be called directly.
+   *
+   * @return bool
+   *   This function will always return TRUE.
+   */
   function _drupal_session_close() {
     return TRUE;
   }
 
   /**
-  * Reads an entire session from the database (internal use only).
-  *
-  * Also initializes the $user object for the user associated with the session.
-  * This function is registered with session_set_save_handler() to support
-  * database-backed sessions. It is called on every page load when PHP sets
-  * up the $_SESSION superglobal.
-  *
-  * This function is an internal function and must not be called directly.
-  * Doing so may result in logging out the current user, corrupting session data
-  * or other unexpected behavior. Session data must always be accessed via the
-  * $_SESSION superglobal.
-  *
-  * @param string $sid
-  *   The session ID of the session to retrieve.
-  *
-  * @return string
-  *   The user's session, or an empty string if no session exists.
-  */
+   * Reads an entire session from the database (internal use only).
+   *
+   * Also initializes the $user object for the user associated with the session.
+   * This function is registered with session_set_save_handler() to support
+   * database-backed sessions. It is called on every page load when PHP sets
+   * up the $_SESSION superglobal.
+   *
+   * This function is an internal function and must not be called directly.
+   * Doing so may result in logging out the current user, corrupting session
+   * data or other unexpected behavior. Session data must always be accessed via
+   * the $_SESSION superglobal.
+   *
+   * @param string $sid
+   *   The session ID of the session to retrieve.
+   *
+   * @return string
+   *   The user's session, or an empty string if no session exists.
+   */
   function _drupal_session_read($sid) {
     global $user, $is_https;
 
@@ -204,7 +205,10 @@ if (!function_exists('_drupal_session_open')) {
     if ($user && $user->uid > 0 && $user->status == 1) {
       if (!isset($user->roles)) {
         // This is done to unserialize the data member of $user.
-        $user->data = unserialize($user->data);
+        $data = @unserialize($user->data);
+        if ($user->data === 'b:0;' || $data !== FALSE) {
+          $user->data = $data;
+        }
 
         // Add roles element to $user.
         $user->roles = array();
@@ -247,7 +251,8 @@ if (!function_exists('_drupal_session_open')) {
       $user->session = '';
     }
 
-    // Store the session that was read for comparison in _drupal_session_write().
+    // Store the session that was read for comparison in
+    // _drupal_session_write().
     $last_read = &drupal_static('drupal_session_last_read');
     $last_read = array(
       'sid' => $sid,
@@ -258,23 +263,23 @@ if (!function_exists('_drupal_session_open')) {
   }
 
   /**
-  * Writes an entire session to the database (internal use only).
-  *
-  * This function is registered with session_set_save_handler() to support
-  * database-backed sessions.
-  *
-  * This function is an internal function and must not be called directly.
-  * Doing so may result in corrupted session data or other unexpected behavior.
-  * Session data must always be accessed via the $_SESSION superglobal.
-  *
-  * @param string $sid
-  *   The session ID of the session to write to.
-  * @param string $value
-  *   Session data to write as a serialized string.
-  *
-  * @return bool
-  *   Always returns TRUE.
-  */
+   * Writes an entire session to the database (internal use only).
+   *
+   * This function is registered with session_set_save_handler() to support
+   * database-backed sessions.
+   *
+   * This function is an internal function and must not be called directly.
+   * Doing so may result in corrupted session data or other unexpected behavior.
+   * Session data must always be accessed via the $_SESSION superglobal.
+   *
+   * @param string $sid
+   *   The session ID of the session to write to.
+   * @param string $value
+   *   Session data to write as a serialized string.
+   *
+   * @return bool
+   *   Always returns TRUE.
+   */
   function _drupal_session_write($sid, $value) {
     global $user, $is_https;
 
@@ -282,8 +287,9 @@ if (!function_exists('_drupal_session_open')) {
     // manually.
     try {
       if (!drupal_save_session()) {
-        // We don't have anything to do if we are not allowed to save the session.
-        return FALSE;
+        // We don't have anything to do if we are not allowed to save the
+        // session.
+        return TRUE;
       }
 
       // Check whether $_SESSION has been changed in this request.
@@ -291,7 +297,8 @@ if (!function_exists('_drupal_session_open')) {
       $is_changed = !isset($last_read) || $last_read['sid'] != $sid || $last_read['value'] !== $value;
 
       // For performance reasons, do not update the sessions table, unless
-      // $_SESSION has changed or more than 180 has passed since the last update.
+      // $_SESSION has changed or more than 180 has passed since the last
+      // update.
       if ($is_changed || !isset($user->timestamp) || REQUEST_TIME - $user->timestamp > variable_get('session_write_interval', 180)) {
         // Either ssid or sid or both will be added from $key below.
         $fields = array(
@@ -310,8 +317,8 @@ if (!function_exists('_drupal_session_open')) {
         if ($is_https) {
           $key['ssid'] = $sid;
           // The "secure pages" setting allows a site to simultaneously use both
-          // secure and insecure session cookies. If enabled and both cookies are
-          // presented then use both keys.
+          // secure and insecure session cookies. If enabled and both cookies
+          // are presented then use both keys.
           if (variable_get('https', FALSE)) {
             $insecure_session_name = substr(session_name(), 1);
             if (isset($_COOKIE[$insecure_session_name])) {
@@ -374,8 +381,8 @@ if (!function_exists('_drupal_session_open')) {
     }
     catch (Exception $exception) {
       require_once DRUPAL_ROOT . '/includes/errors.inc';
-      // If we are displaying errors, then do so with no possibility of a further
-      // uncaught exception being thrown.
+      // If we are displaying errors, then do so with no possibility of a
+      // further uncaught exception being thrown.
       if (error_displayable()) {
         print '<h1>Uncaught exception thrown in session handler.</h1>';
         print '<p>' . _drupal_render_exception_safe($exception) . '</p><hr />';
@@ -385,8 +392,8 @@ if (!function_exists('_drupal_session_open')) {
   }
 
   /**
-  * Initializes the session handler, starting a session if needed.
-  */
+   * Initializes the session handler, starting a session if needed.
+   */
   function drupal_session_initialize() {
     global $user, $is_https;
 
@@ -422,16 +429,18 @@ if (!function_exists('_drupal_session_open')) {
       }
     }
     date_default_timezone_set(drupal_get_user_timezone());
+    return TRUE;
   }
 
   /**
-  * Starts a session forcefully, preserving already set session data.
-  *
-  * @ingroup php_wrappers
-  */
+   * Starts a session forcefully, preserving already set session data.
+   *
+   * @ingroup php_wrappers
+   */
   function drupal_session_start() {
     // Command line clients do not support cookies nor sessions.
-    if (!drupal_session_started() && !drupal_is_cli()) {
+    // Also do not send headers if they have already been sent out.
+    if (!headers_sent() && !drupal_session_started() && !drupal_is_cli()) {
       // Save current session data before starting it, as PHP will destroy it.
       $session_data = isset($_SESSION) ? $_SESSION : NULL;
 
@@ -443,19 +452,20 @@ if (!function_exists('_drupal_session_open')) {
         $_SESSION += $session_data;
       }
     }
+    return TRUE;
   }
 
   /**
-  * Commits the current session, if necessary.
-  *
-  * If an anonymous user already have an empty session, destroy it.
-  */
+   * Commits the current session, if necessary.
+   *
+   * If an anonymous user already have an empty session, destroy it.
+   */
   function drupal_session_commit() {
     global $user, $is_https;
 
     if (!drupal_save_session()) {
       // We don't have anything to do if we are not allowed to save the session.
-      return;
+      return TRUE;
     }
 
     if (empty($user->uid) && empty($_SESSION)) {
@@ -480,11 +490,12 @@ if (!function_exists('_drupal_session_open')) {
       // Write the session data.
       session_write_close();
     }
+    return TRUE;
   }
 
   /**
-  * Returns whether a session has been started.
-  */
+   * Returns whether a session has been started.
+   */
   function drupal_session_started($set = NULL) {
     static $session_started = FALSE;
     if (isset($set)) {
@@ -494,15 +505,15 @@ if (!function_exists('_drupal_session_open')) {
   }
 
   /**
-  * Called when an anonymous user becomes authenticated or vice-versa.
-  *
-  * @ingroup php_wrappers
-  */
+   * Called when an anonymous user becomes authenticated or vice-versa.
+   *
+   * @ingroup php_wrappers
+   */
   function drupal_session_regenerate() {
     global $user, $is_https;
     // Nothing to do if we are not allowed to change the session.
     if (!drupal_save_session()) {
-      return;
+      return TRUE;
     }
 
     if ($is_https && variable_get('https', FALSE)) {
@@ -554,9 +565,9 @@ if (!function_exists('_drupal_session_open')) {
       }
     }
     elseif (isset($old_insecure_session_id)) {
-      // If logging in to the secure site, and there was no active session on the
-      // secure site but a session was active on the insecure site, update the
-      // insecure session with the new session identifiers.
+      // If logging in to the secure site, and there was no active session on
+      // the secure site but a session was active on the insecure site, update
+      // the insecure session with the new session identifiers.
       $query = \Database::getConnection()->prefixTables("UPDATE {sessions}");
       $query .= " SET sid = '" . apdqc_escape_string($session_id) . "',";
       $query .= " ssid = '" . apdqc_escape_string(session_id()) . "'";
@@ -579,22 +590,23 @@ if (!function_exists('_drupal_session_open')) {
       $user = $account;
     }
     date_default_timezone_set(drupal_get_user_timezone());
+    return TRUE;
   }
 
   /**
-  * Session handler assigned by session_set_save_handler().
-  *
-  * Cleans up a specific session.
-  *
-  * @param string $sid
-  *   Session ID.
-  */
+   * Session handler assigned by session_set_save_handler().
+   *
+   * Cleans up a specific session.
+   *
+   * @param string $sid
+   *   Session ID.
+   */
   function _drupal_session_destroy($sid) {
     global $user, $is_https;
 
     // Nothing to do if we are not allowed to change the session.
     if (!drupal_save_session()) {
-      return;
+      return TRUE;
     }
 
     // Delete session data.
@@ -621,16 +633,17 @@ if (!function_exists('_drupal_session_open')) {
     elseif (variable_get('https', FALSE)) {
       _drupal_session_delete_cookie('S' . session_name(), TRUE);
     }
+    return TRUE;
   }
 
   /**
-  * Deletes the session cookie.
-  *
-  * @param string $name
-  *   Name of session cookie to delete.
-  * @param bool $secure
-  *   Force the secure value of the cookie.
-  */
+   * Deletes the session cookie.
+   *
+   * @param string $name
+   *   Name of session cookie to delete.
+   * @param bool $secure
+   *   Force the secure value of the cookie.
+   */
   function _drupal_session_delete_cookie($name, $secure = NULL) {
     global $is_https;
     if (isset($_COOKIE[$name]) || (!$is_https && $secure === TRUE)) {
@@ -641,18 +654,19 @@ if (!function_exists('_drupal_session_open')) {
       setcookie($name, '', REQUEST_TIME - 3600, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
       unset($_COOKIE[$name]);
     }
+    return TRUE;
   }
 
   /**
-  * Ends a specific user's session(s).
-  *
-  * @param int $uid
-  *   User ID.
-  */
+   * Ends a specific user's session(s).
+   *
+   * @param int $uid
+   *   User ID.
+   */
   function drupal_session_destroy_uid($uid) {
     // Nothing to do if we are not allowed to change the session.
     if (!drupal_save_session()) {
-      return;
+      return TRUE;
     }
 
     $query = \Database::getConnection()->prefixTables("DELETE FROM {sessions}");
@@ -667,14 +681,14 @@ if (!function_exists('_drupal_session_open')) {
   }
 
   /**
-  * Session handler assigned by session_set_save_handler().
-  *
-  * Cleans up stalled sessions.
-  *
-  * @param int $lifetime
-  *   The value of session.gc_maxlifetime, passed by PHP.
-  *   Sessions not updated for more than $lifetime seconds will be removed.
-  */
+   * Session handler assigned by session_set_save_handler().
+   *
+   * Cleans up stalled sessions.
+   *
+   * @param int $lifetime
+   *   The value of session.gc_maxlifetime, passed by PHP.
+   *   Sessions not updated for more than $lifetime seconds will be removed.
+   */
   function _drupal_session_garbage_collection($lifetime) {
     // Be sure to adjust 'php_value session.gc_maxlifetime' to a large enough
     // value. For example, if you want user sessions to stay in your database
@@ -682,7 +696,7 @@ if (!function_exists('_drupal_session_open')) {
     // to '1814400'. At that value, only after a user doesn't log in after
     // three weeks (1814400 seconds) will his/her session be removed.
     $query = \Database::getConnection()->prefixTables("DELETE FROM {sessions}");
-    $query .= " WHERE timestamp = '" . apdqc_escape_string(REQUEST_TIME - $lifetime) . "'";
+    $query .= " WHERE timestamp < '" . apdqc_escape_string(REQUEST_TIME - $lifetime) . "'";
     // Run Query.
     $results = apdqc_query(array('sessions'), array('*'), $query, array('async' => TRUE));
     if ($results === 'NO DB') {
@@ -694,20 +708,20 @@ if (!function_exists('_drupal_session_open')) {
   }
 
   /**
-  * Determines whether to save session data of the current request.
-  *
-  * This function allows the caller to temporarily disable writing of
-  * session data, should the request end while performing potentially
-  * dangerous operations, such as manipulating the global $user object.
-  * See http://drupal.org/node/218104 for usage.
-  *
-  * @param bool $status
-  *   Disables writing of session data when FALSE, (re-)enables
-  *   writing when TRUE.
-  *
-  * @return bool
-  *   FALSE if writing session data has been disabled. Otherwise, TRUE.
-  */
+   * Determines whether to save session data of the current request.
+   *
+   * This function allows the caller to temporarily disable writing of
+   * session data, should the request end while performing potentially
+   * dangerous operations, such as manipulating the global $user object.
+   * See http://drupal.org/node/218104 for usage.
+   *
+   * @param bool $status
+   *   Disables writing of session data when FALSE, (re-)enables
+   *   writing when TRUE.
+   *
+   * @return bool
+   *   FALSE if writing session data has been disabled. Otherwise, TRUE.
+   */
   function drupal_save_session($status = NULL) {
     // PHP session ID, session, and cookie handling happens in the global scope.
     // This value has to persist across calls to drupal_static_reset(), since a
@@ -718,4 +732,5 @@ if (!function_exists('_drupal_session_open')) {
     }
     return $save_session;
   }
+
 }

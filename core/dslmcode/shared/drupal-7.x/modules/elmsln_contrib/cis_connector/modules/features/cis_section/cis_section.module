@@ -1,0 +1,801 @@
+<?php
+/**
+ * @file
+ * Code for the CIS Section feature.
+ */
+
+define('CIS_SECTION_STUDENT', 'student');
+define('CIS_SECTION_PAST_STUDENT', 'past student');
+define('CIS_SECTION_STRICT_ACCESS', TRUE);
+
+include_once 'cis_section.features.inc';
+
+/**
+ * Implements hook_menu().
+ */
+function cis_section_menu() {
+  $items['api/v1/elmsln/sections'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('section', NULL, NULL),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/elmsln/sections/%'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('section', 4, 'query'),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_registry_files_alter().
+ */
+function cis_section_registry_files_alter(&$files, $modules) {
+  // Manually add here as this is a feature and the .info may get overridden.
+  $file_path = drupal_get_path('module', 'cis_section') . '/src/CisSectionRosterProcessor.php';
+  $files[$file_path] = array('module' => 'cis_section', 'weight' => 0);
+}
+
+/**
+ * Implements hook_og_context_negotiation_info().
+ * Add context negotiation info.
+ *
+ * Define context "handlers".
+ * - name: The human readable name of the context handler.
+ * - Description: The description of the context handler.
+ * - callback: The name of an implementation of callback_og_context_handler().
+ * - menu path: Optional; The menu path as retrieved from menu_get_item() that
+ *   is required for the context handler to be invoked.
+ */
+function cis_section_og_context_negotiation_info() {
+  $providers = array();
+
+  $providers['cis_section'] = array(
+    'name' => t('CIS Section Context'),
+    'description' => t('Determine context by checking for section context'),
+    'callback' => '_cis_section_og_context_handler',
+  );
+
+  return $providers;
+}
+
+/**
+ * Implements hook_elmsln_jsapi_info().
+ */
+function cis_section_elmsln_jsapi_info() {
+  // section api router
+  $items['section'] = array(
+    'type'   => 'node',
+    'bundle' => 'section',
+    'modify' => '_cle_section_v1_section_modify',
+    'list'   => '_cis_section_v1_get_sections',
+    'output' => '_cis_section_v1_section_output',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_elmsln_jsapi_user_request_alter().
+ */
+function cis_section_elmsln_jsapi_user_request_alter(&$vars) {
+  // add on sections this user is apart of
+  $field_conditions = array('field_cis_active' => array('value', 1, '='));
+  $property_conditions = array('status' => array(NODE_PUBLISHED, '='));
+  $orderby = array('field_cis_active' => array('value', 'DESC'));
+  $sections = _cis_connector_assemble_entity_list('node', 'section', 'nid', '_entity', $field_conditions, $property_conditions, $orderby);
+  foreach ($sections as $nid => $section) {
+    $vars['sections'][$nid] = _cis_section_v1_section_output($section);
+  }
+}
+
+/**
+ * Callback for outputting a section via ELMSLN JS API
+ * @param  object $node node object that is a section
+ * @return array       structured response of how to render a section
+ */
+function _cis_section_v1_section_output($node) {
+  // we can never update or delete via this method based on data model
+  $metadata = array(
+    'canUpdate' => 0,
+    'canDelete' => 0,
+  );
+
+  // this will be our json formatted output
+  $return = array(
+    'id' => (int)$node->nid,
+    'uid' => (int)$node->uid,
+    'uuid' => $node->uuid,
+    'title' => $node->title,
+    'status' => (int)$node->status,
+    'created' => Date('c', $node->created),
+    'section_id' => $node->field_section_id['und'][0]['safe_value'],
+    'active' => (int)$node->field_cis_active['und'][0]['value'],
+    'metadata' => $metadata,
+    'links' => array(
+      'self' => $base_url . '/api/v1/elmsln/section/' . $node->nid,
+    ),
+  );
+
+  return $return;
+}
+
+/**
+ * Callback to return a list of sections.
+ * @return array listing of sections the user has access to
+ */
+function _cis_section_v1_get_sections($filter = array()) {
+  $items = array();
+  $field_conditions = array();
+  $property_conditions = array('status' => array(NODE_PUBLISHED, '='));
+  if (isset($filter['section'])) {
+    $property_conditions['nid'] = array($filter['section'], '=');
+  }
+  $orderby = array('field_cis_active' => array('value', 'DESC'));
+  $items = _cis_connector_assemble_entity_list('node', 'section', 'nid', '_entity', $field_conditions, $property_conditions, $orderby);
+  return $items;
+}
+
+/**
+ * This isn't allowed since section is globally managed by CIS.
+ * @return bool        value is always FALSE for data model purposes
+ */
+function _cle_section_v1_section_modify($node, $params = NULL) {
+  return FALSE;
+}
+
+/**
+ * Evaluates and return group IDs to provide group context.
+ *
+ * Callback for hook_og_context_negotiation_info().
+ *
+ * @return
+ *  A nested array of group IDs, grouped first by entity type. Each value is
+ *  a flat array of group IDs.
+ */
+function _cis_section_og_context_handler() {
+  $contexts = array();
+  // check for section context
+  $section = _cis_connector_section_context(NULL, TRUE);
+  // try and load by id since og_context wants a node id not our primary key
+  if ($section && $id = _cis_section_load_section_by_id($section)) {
+    $contexts['node'][] = $id;
+  }
+  // default is to pull in the active user account
+  elseif ($gids = og_get_entity_groups()) {
+    $contexts = $gids;
+  }
+  else {
+    return FALSE;
+  }
+  return $contexts;
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function cis_section_entity_presave($entity, $type) {
+  // our default handler for LTI section saves is anonymous
+  // this way we don't need to give users permission to build these
+  if ($type == 'node' && $entity->type == 'section') {
+    // force this to be user 1's node, we don't want annonymous anything
+    // as this can create confusion with access control modules and ownership
+    // of content later on in the life cycle
+    if ($entity->uid == 0) {
+      $entity->uid = 1;
+    }
+    // when CIS calls us we don't know the nid but we do know the UUID
+    // see if this is valid and if it is convert to it based on field match
+    if (module_exists('cis_course_authority') && uuid_is_valid($entity->field_section_course_ref['und'][0]['target_id'])) {
+      $query = new EntityFieldQuery;
+      $query->entityCondition('entity_type', 'node');
+      $query->entityCondition('bundle', 'cis_course');
+      $query->propertyCondition('status', 1);
+      $query->fieldCondition('field_cis_course_uuid', 'value', $entity->field_section_course_ref['und'][0]['target_id'], '=');
+      $result = $query->execute();
+      // ensure this produces results to avoid null queries
+      if (!empty($result['node'])) {
+        $nids = array_keys($result['node']);
+        $nid = array_pop($nids);
+        $entity->field_section_course_ref['und'][0]['target_id'] = $nid;
+      }
+      else {
+        unset($entity->field_section_course_ref);
+      }
+    }
+  }
+  // optional ability to email someone standard language
+  // this happens if its a user, and we forced roster sync
+  // and it has the special cis_contact flag and the email
+  // in the address matches the email of this user account
+  // and they were created by the job which triggered this
+  // being created in the first place.  Edge case but very
+  // useful for alleviating workflow when a student is denied
+  // access to the course from an LMS vendor / data source
+  // and we need to alert IDs about it without forcing action.
+  if ($type == 'user' &&
+      isset($_GET['force_roster_sync']) &&
+      isset($_GET['cis_contact']) &&
+      $_GET['cis_contact'] == $entity->mail
+    ) {
+    $subject = t('You now have access to the @course course', array('@course' => variable_get('site_name', '')));
+    // request the standard language for this edge case
+    $query = array('type' => 'resource', 'field_machine_name' => 'lms_out_of_sync');
+    $resource = _cis_connection_query($query);
+    // render text applying the input filter requested
+    $message = check_markup($resource['list'][0]['body']['value'], $resource['list'][0]['body']['format']);
+    // allow for user in field
+    $message = str_replace('!name', $entity->name, $message);
+    // send an email about
+    watchdog('cis email', '@mail contacted about course being synced', array('@mail' => $entity->mail));
+    _cis_connector_simple_mail($entity->mail, $subject, $message, variable_get('site_mail', $entity->mail));
+  }
+}
+
+/**
+ * Return all found sections as these are valid for switching
+ *
+ * This is essentially a list of the current user's groups
+ *
+ * @param boolean $active_only
+ *   (optional) Whether or not to return only the active sections
+ *   this user is a part of.
+ * @param  boolean $strict
+ *   (optional) Whether to enforce node permissions when selecting
+ *   groups. As this function implies EVERYTHING, we default to false
+ *   on strict permissions interpretation. Strict allows for showing
+ *   all the sections that are active, that lower permissioned roles
+ *   actually have access to.
+ * @return $sections
+ *   array of section key paired as key => name
+ */
+function cis_section_all_sections($active_only = FALSE, $strict = FALSE) {
+  $sections = array();
+  // select field section data
+  $query = new EntityFieldQuery();
+  // pull all nodes
+  $query->entityCondition('entity_type', 'node')
+  // that are sections
+  ->entityCondition('bundle', 'section')
+  // that are published
+  ->propertyCondition('status', 1);
+  // execute this as user 1 to avoid object conflicts
+  // especially since we use OG all over the place
+  if (!$strict) {
+    $query->addMetaData('account', user_load(1));
+  }
+  // allow for filtering by active state
+  if ($active_only) {
+    $query->fieldCondition('field_cis_active', 'value', 1, '=');
+  }
+  // order by status, then by title
+  $query->propertyOrderBy('title');
+  if (!$active_only) {
+    $query->fieldOrderBy('field_cis_active', 'value', 'DESC');
+  }
+  // store results
+  $result = $query->execute();
+  // ensure we have results
+  if (isset($result['node'])) {
+    $nids = array_keys($result['node']);
+    $results = entity_load('node', $nids);
+    // convert to a readable array of options
+    foreach ($results as $val) {
+      $section = $val->field_section_id['und'][0]['safe_value'];
+      $sections[$section] = $val->title;
+    }
+    // useful for custom college / university integrations
+    drupal_alter('cis_section_list', $sections);
+  }
+  return $sections;
+}
+
+/**
+ * Assemble the roster
+ *
+ * We must have another module implement roster code to use this.
+ *
+ * @param $sections
+ *   An array of sections to assemble the roster for.
+ * @param $activated
+ *   (optional) Special case where a section was manually
+ *   told to be activated via save or the UI. In this case
+ *   we ignore semester boundaries and sync this roster regardless.
+ * @return $roster
+ *   an array of users keyed by section and their role.
+ *
+ * @see _cis_connector_transaction()
+ */
+function cis_section_assemble_roster($sections, $activated = FALSE) {
+  // build roster based on an array of sections
+  $roster = array();
+  foreach ($sections as $section) {
+    // ensure we only sync things that should be sycned
+    // this helps elminate purely developmental section spaces like masters
+    // as well as sections primed for setup but not active
+    // as the per the semester dates
+    $dates = _cis_connector_transaction('section_dates', 'default', array(), $section);
+    // only perform this if we have dates stored
+    if (isset($dates['end']) && isset($dates['start'])) {
+      if (($dates['start'] < REQUEST_TIME && $dates['end'] > REQUEST_TIME) || $activated) {
+        // build the roster for this section
+        $tmproster = module_invoke_all('cis_section_build_roster', $section);
+        // allow for altering roster pull methods
+        drupal_alter('cis_section_build_roster', $tmproster, $section);
+        $roster[$section] = $tmproster;
+      }
+      // test for it being before a section is active / is running
+      // this helps ensure students don't get access early but if
+      // instructors or teaching assistants come across the API it adds them
+      elseif ($dates['start'] > REQUEST_TIME) {
+        // build the roster for this section
+        $tmproster = module_invoke_all('cis_section_build_roster', $section);
+        // allow for altering roster pull methods
+        drupal_alter('cis_section_build_roster', $tmproster, $section);
+        foreach ($tmproster as $uname => $urole) {
+          // don't grant students early access but still give them an account
+          // this way our roster totals / accounts show up but they don't gain
+          // the student role until the time they are supposed to.
+          // it also enables them to access the welcome letter and other
+          // CIS delivered logistical information.
+          if ($urole == 'student') {
+            $tmproster[$uname] = 'authenticated user';
+          }
+        }
+        $roster[$section] = $tmproster;
+      }
+      // test for it being after date that this section should be active
+      // this reduces strain on APIs via needless calls after the semester has happened
+      elseif ($dates['end'] < REQUEST_TIME) {
+        $nid = _cis_section_load_section_by_id($section);
+        $node = node_load($nid);
+        // mark this as inactive, this will trigger the cis_section clean up on node_update hook
+        $node->field_cis_active['und'][0]['value'] = 0;
+        node_save($node);
+      }
+    }
+  }
+  return $roster;
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function cis_section_node_insert($node) {
+  // don't process these if the call is originating
+  // from our elmsln_api task runner
+  global $_elmsln_api_processing;
+  if ($_elmsln_api_processing) {
+    $node->_ignore_sync = TRUE;
+  }
+  if ($node->type == 'section') {
+    // ensure all staff / admin users are added to
+    // the group automatically for staff level roles
+    $roles = _cis_connector_role_groups('staff');
+    // load all uids
+    $uids = _cis_connector_load_users_by_role($roles);
+    // load all user entities in the list
+    $users = entity_load('user', $uids);
+    // load group role by name
+    $ogrole = _cis_section_og_role_load_by_name('staff');
+    foreach ($users as $member) {
+      $values = array(
+        'entity_type' => 'user',
+        'entity' => $member,
+        'field_name' => 'og_user_node',
+      );
+      // add user to the group as a member
+      og_group('node', $node->nid, $values);
+      // give them the special staff role if it exists
+      if ($ogrole) {
+        _cis_section_og_role_grant('node', $node->nid, $member->uid, $ogrole->rid, 'update');
+      }
+    }
+    // account for newly created sections being activated
+    // so we can react immediately
+    if ($node->field_cis_active['und'][0]['value'] == 1) {
+      cis_section_state_change($node, 'activate');
+    }
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function cis_section_node_update($node) {
+  // don't process these if the call is originating
+  // from our elmsln_api task runner
+  global $_elmsln_api_processing;
+  if ($_elmsln_api_processing) {
+    $node->_ignore_sync = TRUE;
+  }
+  // test for a section being deactivated
+  if ($node->type == 'section') {
+    if ($node->field_cis_active['und'][0]['value'] == 0) {
+      cis_section_state_change($node, 'deactivate');
+    }
+    else {
+      // allow other projects to perform actions based on this node being activated
+      cis_section_state_change($node, 'activate');
+    }
+  }
+}
+
+/**
+ * Implements hook_cis_section_activate().
+ */
+function cis_section_cis_section_activate() {
+  return array('_cis_section_activate_section');
+}
+
+/**
+ * Callback for hook_cis_section_activate().
+ */
+function _cis_section_activate_section($node) {
+  // check for a property telling us to ignore this sync
+  // this happens when updating the source node w/o
+  // need to sync such as when the title changes
+  if (!isset($node->_ignore_sync)) {
+    // grab section id
+    $section = array($node->field_section_id['und'][0]['value']);
+    // pull the roster together for this section
+    $roster = cis_section_assemble_roster($section, TRUE);
+    // build the user accounts
+    watchdog('roster', 'Roster synced for section @section', array('@section' => $node->field_section_id['und'][0]['value']));
+    _cis_section_create_accounts($roster);
+    drupal_set_message(t('Roster synced for section @section', array('@section' => $node->field_section_id['und'][0]['value'])), 'toast');
+  }
+}
+
+/**
+ * Implements hook_cis_section_deactivate().
+ */
+function cis_section_cis_section_deactivate() {
+  return array('_cis_section_deactivate_section');
+}
+
+/**
+ * Callback for hook_cis_section_deactivate().
+ */
+function _cis_section_deactivate_section($node) {
+  // see if developer variable exists to prevent drop of access
+  // if we no longer see the account come across
+  if (variable_get('cis_section_strict_access', CIS_SECTION_STRICT_ACCESS)) {
+    // standard conversion of student to past student roles
+    $student = user_role_load_by_name(CIS_SECTION_STUDENT);
+    $past = user_role_load_by_name(CIS_SECTION_PAST_STUDENT);
+    $current = _cis_section_load_users_by_gid($node->nid, $student->rid);
+    // find users that no longer came across
+    $diff = array_diff($current, array());
+    foreach ($diff as $uid) {
+      $account = user_load($uid);
+      // drop student role
+      unset($account->roles[$student->rid]);
+      // gain past student role
+      $account->roles[$past->rid] = $past->name;
+      user_save($account);
+    }
+  }
+}
+
+/**
+ * Run hooks for state of section.
+ */
+function cis_section_state_change($node, $state = 'activate') {
+  // activate / deactivate only two allowed states at this time
+  if (!in_array($state, array('activate', 'deactivate'))) {
+    return FALSE;
+  }
+  // easier calls for activate / deactivate in bulk
+  $calls = module_invoke_all('cis_section_' . $state);
+  // alter the call list
+  drupal_alter('cis_section_' . $state, $calls);
+  // run each call
+  foreach ($calls as $call) {
+    call_user_func($call, $node);
+  }
+}
+
+/**
+ * Create accounts, groups, and associate to groups.
+ *
+ * @param array $roster
+ *   The roster.
+ * @param bool $defer
+ *   Whether we should defer large sets complete on cron. Defaults to FALSE.
+ */
+function _cis_section_create_accounts($roster, $defer = TRUE) {
+  $batch_size = $defer ? CisSectionRosterProcessor::BATCH_DEFAULT : CisSectionRosterProcessor::BATCH_UNLIMITED;
+  // load the queue for long running batch processing
+  $queue = \DrupalQueue::get(CisSectionRosterProcessor::QUEUE_NAME);
+  // see if we already have a queue running for this
+  if ($queue->numberOfItems() == 0) {
+    $processor = new CisSectionRosterProcessor($roster, $batch_size);
+  }
+  else {
+    // we found something, claim it, and then remove it
+    $item = $queue->claimItem(300);
+    try {
+      $processor = $item->data;
+      $queue->deleteItem($item);
+    }
+    catch (Exception $e) {
+      watchdog_exception('cis_section_cron', $e);
+    }
+  }
+
+  // Always attempt to process a batch the first time round.
+  return $processor->process();
+}
+
+/**
+ * Load an organic group by unique section ID.
+ *
+ * @param $id string   a unique id
+ *
+ * @return    mixed    FALSE if nothing found or a entity id
+ */
+function _cis_section_load_section_by_id($id) {
+  // @todo drupal static to prevent multiple querying here
+  // entity field query to load a section by id
+  $query = new EntityFieldQuery();
+  $query
+  // pull group nodes
+  ->entityCondition('entity_type', 'node')
+  // of type section
+  ->entityCondition('bundle', 'section')
+  // that are published
+  ->propertyCondition('status', 1)
+  // only select based on the id we were passed
+  ->fieldCondition('field_section_id', 'value', $id, '=')
+  // execute this as user 1 to avoid object conflicts
+  ->addMetaData('account', user_load(1))
+  // only return 1 value
+  ->range(0, 1);
+  $result = $query->execute();
+  // flip the results if it found them
+  if (isset($result['node'])) {
+    // we know there's only 1 value in this array
+    $key = array_keys($result['node']);
+    return array_pop(($key));
+  }
+  // no matches
+  return FALSE;
+}
+
+/**
+ * Load an organic group by unique section ID.
+ */
+function _cis_section_load_users_by_gid($gid, $rid = NULL) {
+  // select from membership
+  $query = db_select('og_membership', 'ogm');
+  // only entity id
+  $query->fields('ogm', array('etid'));
+  // join user table
+  $query->innerJoin('users', 'u', 'ogm.etid = u.uid');
+  // join role table
+  $query->innerJoin('users_roles', 'ur', 'u.uid = ur.uid');
+  // where entity type is user
+  $query->condition('ogm.entity_type', 'user');
+  // where field name matches our global
+  $query->condition('ogm.field_name', 'og_user_node');
+  // and group is the one requested
+  $query->condition('ogm.gid', $gid);
+  // only show users that are active
+  $query->condition('u.status', 1);
+  // limit to a certain role if set
+  if (!is_null($rid)) {
+    $query->condition('ur.rid', $rid);
+  }
+  $result = $query->execute();
+  // weird call but returns an array of the uids selected
+  return array_keys($result->fetchAllAssoc('etid'));
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function cis_section_form_elmsln_core_service_settings_form_alter(&$form, &$form_state, $form_id) {
+  $options = array(CIS_NO_SECTION => 'No default') + _cis_connector_assemble_entity_list('node', 'section', 'field_section_id', 'title');
+  $form['section'] = array(
+    '#tree' => '0',
+    '#type' => 'fieldset',
+    '#collapsed' => '1',
+    '#collapsible' => '1',
+    '#title' => t('Default Section'),
+    '#weight' => '-10',
+  );
+  $form['section']['cis_section_default'] = array(
+    '#default_value' => variable_get('cis_section_default', CIS_NO_SECTION),
+    '#weight' => '3',
+    '#description' => t('This is used in cases where a user is not in a group but should still have access to the system such as a course that allows annonymous access or access to anyone to passes the authentication system but isn\'t nessecarily in a section.'),
+    '#type' => 'select',
+    '#title' => t('Default section'),
+    '#options' => $options,
+    '#required' => '1',
+  );
+}
+
+/**
+ * Implements hook_user_insert().
+ */
+function cis_section_user_insert(&$edit, $account, $category) {
+  // switch IDs over to role name
+  foreach ($account->roles as $key => $rid) {
+    if (is_numeric($rid)) {
+      $tmp = user_role_load($rid);
+      if (isset($tmp->name)) {
+        $account->roles[$key] = $tmp->name;
+      }
+    }
+  }
+  // add user to master section automatically if they are
+  // staff admin or teacher
+  if (_cis_connector_role_groupings(array('staff', 'teacher', 'guest'), $account)) {
+    $query = new EntityFieldQuery();
+    // pull all nodes
+    $query->entityCondition('entity_type', 'node')
+    // that are sections
+    ->entityCondition('bundle', 'section')
+    // where it looks like master or master_ for authorities
+    ->fieldCondition('field_section_id', 'value', CIS_SECTION_MASTER, 'STARTS_WITH')
+    // load all possible results in system, should only be 1 though
+    ->addMetaData('account', user_load(1));
+    // store result
+    $result = $query->execute();
+    // ensure we have results
+    if (isset($result['node'])) {
+      $nids = array_keys($result['node']);
+      $sections = entity_load('node', $nids);
+      // loop through sections adding user to master / roles in each
+      foreach ($sections as $section) {
+        $values = array(
+          'entity_type' => 'user',
+          'entity' => $account,
+          'field_name' => 'og_user_node',
+        );
+        // add user to the group
+        og_group('node', $section->nid, $values);
+        // run through the account granting roles to this to match
+        foreach ($account->roles as $key => $name) {
+          if ($ogrole = _cis_section_og_role_load_by_name($name)) {
+            _cis_section_og_role_grant('node', $section->nid, $account->uid, $ogrole->rid, 'insert');
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Callback to sync the roster by assembling all sections and creating accounts.
+ */
+function _cis_section_sync_roster() {
+  // test for if we should sync w/ our roster provider
+  $frequency = variable_get('cis_service_connection_sync_frequency', CIS_SERVICE_CONNECTION_SYNC_FREQUENCY);
+  $interval = 86400 * $frequency;
+  // always sync if this call just came from drush
+  // sync this course with LMS based on section data if time has passed
+  // sync if there's an argument asking to force sync
+  if (drupal_is_cli() || isset($_GET['force_roster_sync']) || (REQUEST_TIME - variable_get('cis_service_connection_last_sync', 0)) > $interval) {
+    // simple section pull based on those included locally
+    $sections = array_keys(cis_section_all_sections(TRUE));
+    // pull the roster together
+    $roster = cis_section_assemble_roster($sections);
+    // build the user accounts
+    watchdog('roster', 'Roster service synced with !roster sections', array('!roster' => count($roster)));
+    _cis_section_create_accounts($roster);
+  }
+}
+
+/**
+ * Implements hook_elmsln_api_info().
+ */
+function cis_section_elmsln_api_info() {
+  // sync rosters for this item
+  $callbacks['sync_roster'] = array(
+    'methods' => array('POST'),
+    'file' => 'callbacks/v1/sync_roster.inc',
+    'bootstrap' => DRUPAL_BOOTSTRAP_FULL,
+  );
+
+  return $callbacks;
+}
+
+/**
+ * Grant a group role to a user.
+ * @see  og_role_grant this is a fork of that because that function
+ *                     isn't allowed to add things to users while
+ *                     being saved the first time.
+ *
+ * @param $group_type
+ *   The entity type of the group.
+ * @param $gid
+ *   The group ID.
+ * @param $uid
+ *   The user ID.
+ * @param $rid
+ *   The role ID.
+ */
+function _cis_section_og_role_grant($group_type, $gid, $uid, $rid, $mode = 'update') {
+  // Make sure the role is valid.
+  $group = entity_load_single($group_type, $gid);
+  list(,, $bundle) = entity_extract_ids($group_type, $group);
+  $og_roles = og_roles($group_type, $bundle, $gid, FALSE, FALSE);
+  if (empty($og_roles[$rid])) {
+    // Role isn't valid.
+    return;
+  }
+  $add = FALSE;
+  // Get the existing user roles.
+  if ($mode == 'update') {
+    // ensure they don't already have this role
+    $user_roles = og_get_user_roles($group_type, $gid, $uid);
+    // if they don't, then just ignore everything here
+    if (empty($user_roles[$rid])) {
+      $add = TRUE;
+    }
+  }
+  elseif ($mode == 'insert') {
+    $add = TRUE;
+  }
+  // only add the role if we've been told to do so
+  if ($add) {
+    $role = new stdClass();
+    $role->uid = $uid;
+    $role->rid = $rid;
+    $role->group_type = $group_type;
+    $role->gid = $gid;
+
+    drupal_write_record('og_users_roles', $role);
+    og_invalidate_cache();
+    module_invoke_all('og_role_grant', $group_type, $gid, $uid, $rid);
+
+    if (module_exists('rules'))  {
+      rules_invoke_event('og_role_grant', og_get_membership($group_type, $gid, 'user', $uid), entity_metadata_wrapper('user', $uid), $rid);
+    }
+  }
+}
+
+/**
+ * Fetch a user role from database by name.
+ *
+ * @param $name
+ *   A string with the role name.
+ *
+ * @return
+ *   A fully-loaded role object if a role name the given name exists,
+ *   FALSE otherwise.
+ */
+function _cis_section_og_role_load_by_name($name) {
+  // @todo do drupal_static with the $name value to reduce querries here
+  return db_select('og_role', 'r')
+    ->fields('r')
+    ->condition('name', $name)
+    ->execute()
+    ->fetchObject();
+}
+
+/**
+ * Implements hook_cron_queue_info().
+ */
+function cis_section_cron_queue_info() {
+  $queues[CisSectionRosterProcessor::QUEUE_NAME] = array(
+    'worker callback' => 'cis_section_roster_processor_worker',
+    'time' => 60,
+  );
+  return $queues;
+}
+
+/**
+ * Queue worker callback for the roster processor.
+ *
+ * @param \CisSectionRosterProcessor $processor
+ *   The roster processor.
+ */
+function cis_section_roster_processor_worker(CisSectionRosterProcessor $processor) {
+  // Simply process it! If it doesn't finish, it will re-queue itself.
+  $processor->process();
+}

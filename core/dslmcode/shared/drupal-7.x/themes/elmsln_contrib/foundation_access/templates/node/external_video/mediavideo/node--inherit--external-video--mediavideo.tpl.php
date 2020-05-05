@@ -1,22 +1,43 @@
+<?php
+  $video = '';
+  if (isset($node->field_video['und'][0]['uri'])) {
+    $video = ' source="'. file_create_url($node->field_video['und'][0]['uri']) .'"';
+  }
+  $track = '';
+  if (isset($node->field_caption['und'][0]['uri'])) {
+    $track = ' track="' . file_create_url(str_replace('.xml', '.vtt', $node->field_caption['und'][0]['uri'])) . '"';
+  }
+  $poster = '';
+  if (isset($node->field_poster['und'][0]['uri'])) {
+    $poster = ' thumbnail-src="' . file_create_url($node->field_poster['und'][0]['uri']) . '"';
+  }
+?>
 <figure id="node-<?php print $node->nid; ?>" class="mediavideo <?php print $classes; ?>"<?php print $attributes; ?>>
-
-  <?php if ($thumbnail): ?>
-    <a href="#" class="mediavideo__close icon-close-black" title="Click to stop and close video."></a>
+  <?php if (isset($content['field_figurelabel_ref'])): ?>
+    <?php print render($content['field_figurelabel_ref'][0]); ?>
   <?php endif; ?>
-
-  <div class="mediavideo__video-wrapper">
-    <?php if ($video_url && $poster): ?>
-      <iframe data-mediavideo-src="<?php print $video_url; ?>" frameborder="0" allowfullscreen></iframe>
+  <div>
+    <?php if ($video_url): ?>
+      <video-player
+      crossorigin="anonymous"
+      id="node-<?php print $node->nid; ?>"
+      <?php print $poster;?>
+      source="<?php print _elmsln_api_video_url($video_url); ?>"
+      class="iframe"
+      <?php print $video; ?>
+      <?php print $track;?>
+      accent-color="red"
+      sticky-corner="none"
+      <?php if (isset($competency)): ?>data-course-competency="<?php print $competency;?>"<?php endif;?>>
+    </video-player>
     <?php else: ?>
       <?php print render($content); ?>
     <?php endif; ?>
   </div>
 
-  <?php if ($poster): ?>
-  <aside class="mediavideo__poster">
-    <img src="<?php print $poster; ?>">
-    <a class="mediavideo__open icon-play-black" href="#" title="Click to view video."></a>
-  </aside>
+  <?php if (isset($duration)): ?>
+    <div class="mediavideo__duration">
+      <?php print $duration; ?>
+    </div>
   <?php endif; ?>
-
 </figure>

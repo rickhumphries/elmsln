@@ -1,0 +1,94 @@
+<?php
+/**
+ * @file
+ * Automatically create a valid RestWS account.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function cis_service_restws_install() {
+  // Make sure that this runs before other modules so we can alter the
+  // restws response for other things to react to
+  db_update('system')
+  ->fields(array(
+    'weight' => -100,
+  ))
+  ->condition('name', 'cis_service_restws')
+  ->condition('type', 'module')
+  ->execute();
+
+  // create user acocunt to match registry file if exists
+  $distro = elmsln_core_get_profile_key();
+  $registry = _cis_connector_build_registry($distro);
+  // ensure that user and pass are set
+  if (isset($registry['user']) && isset($registry['pass'])) {
+    // make sure this account doesn't already exist to avoid an error
+    if (!user_load_by_name($registry['user'])) {
+      // we know we need to make an account, look for mail address
+      if (isset($registry['mail'])) {
+        $mail = $registry['mail'];
+      }
+      else {
+        // generate a fake address
+        $mail = $registry['user'] . '@' . $registry['user'] . '.' . $registry['user'];
+      }
+      // assemble a user object
+      $fields = array(
+        'name' => $registry['user'],
+        'mail' => $mail,
+        'pass' => $registry['pass'],
+        'status' => 1,
+        'init' => $GLOBALS['user']->name,
+        'roles' => array(
+          DRUPAL_AUTHENTICATED_RID => 'authenticated user',
+        ),
+      );
+      // load the service account role
+      $rname = 'SERVICE ACCOUNT';
+      if ($srole = user_role_load_by_name($rname)) {
+        $fields['roles'][$srole->rid] = $rname;
+      }
+      // load the administrator role to ensure webservices can get data needed
+      $aname = 'administrator';
+      if ($arole = user_role_load_by_name($aname)) {
+        $fields['roles'][$arole->rid] = $aname;
+      }
+      // the first parameter is left blank so a new user is created
+      $account = user_save('', $fields);
+    }
+  }
+}
+
+/**
+ * Implements hook_update_N().
+ * Adds the administrator role to the webservice user if detected.
+ * This avoids needless permissions management for an account that
+ * largely can do what it wants anyway and is only invoked on behalf
+ * of operations that do the permissions checks ahead of time.
+ */
+function cis_service_restws_update_7001(&$sandbox) {
+  $distro = elmsln_core_get_profile_key();
+  $registry = _cis_connector_build_registry($distro);
+  // ensure that user and pass are set
+  if (isset($registry['user'])) {
+    // make sure this account exist to avoid an error
+    if ($account = user_load_by_name($registry['user'])) {
+      // load the administrator role to ensure webservices can get data needed
+      $aname = 'administrator';
+      if ($arole = user_role_load_by_name($aname)) {
+        $account->roles[$arole->rid] = $aname;
+        user_save($account);
+      }
+    }
+  }
+}
+
+/**
+ * Adds permission for other users to access the restful node endpoint.
+ * This works with node / entity access still so it only allows for
+ * submitting against it, useful for building out headless integrations.
+ */
+function cis_service_restws_update_7002(&$sandbox) {
+  features_revert_module('cis_service_restws');
+}

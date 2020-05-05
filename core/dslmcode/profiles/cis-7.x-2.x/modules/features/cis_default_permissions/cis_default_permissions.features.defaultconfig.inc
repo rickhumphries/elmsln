@@ -49,15 +49,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'views',
   );
 
-  // Exported permission: 'access back_to_top settings'.
-  $permissions['access back_to_top settings'] = array(
-    'name' => 'access back_to_top settings',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'back_to_top',
-  );
-
   // Exported permission: 'access cis get course list'.
   $permissions['access cis get course list'] = array(
     'name' => 'access cis get course list',
@@ -652,17 +643,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'node',
   );
 
-  // Exported permission: 'create instructional_model content'.
-  $permissions['create instructional_model content'] = array(
-    'name' => 'create instructional_model content',
-    'roles' => array(
-      'SERVICE ACCOUNT' => 'SERVICE ACCOUNT',
-      'administrator' => 'administrator',
-      'staff' => 'staff',
-    ),
-    'module' => 'node',
-  );
-
   // Exported permission: 'create program content'.
   $permissions['create program content'] = array(
     'name' => 'create program content',
@@ -727,17 +707,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'node',
   );
 
-  // Exported permission: 'delete any instructional_model content'.
-  $permissions['delete any instructional_model content'] = array(
-    'name' => 'delete any instructional_model content',
-    'roles' => array(
-      'SERVICE ACCOUNT' => 'SERVICE ACCOUNT',
-      'administrator' => 'administrator',
-      'staff' => 'staff',
-    ),
-    'module' => 'node',
-  );
-
   // Exported permission: 'delete any program content'.
   $permissions['delete any program content'] = array(
     'name' => 'delete any program content',
@@ -785,17 +754,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
   // Exported permission: 'delete own course content'.
   $permissions['delete own course content'] = array(
     'name' => 'delete own course content',
-    'roles' => array(
-      'SERVICE ACCOUNT' => 'SERVICE ACCOUNT',
-      'administrator' => 'administrator',
-      'staff' => 'staff',
-    ),
-    'module' => 'node',
-  );
-
-  // Exported permission: 'delete own instructional_model content'.
-  $permissions['delete own instructional_model content'] = array(
-    'name' => 'delete own instructional_model content',
     'roles' => array(
       'SERVICE ACCOUNT' => 'SERVICE ACCOUNT',
       'administrator' => 'administrator',
@@ -879,17 +837,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'node',
   );
 
-  // Exported permission: 'edit any instructional_model content'.
-  $permissions['edit any instructional_model content'] = array(
-    'name' => 'edit any instructional_model content',
-    'roles' => array(
-      'SERVICE ACCOUNT' => 'SERVICE ACCOUNT',
-      'administrator' => 'administrator',
-      'staff' => 'staff',
-    ),
-    'module' => 'node',
-  );
-
   // Exported permission: 'edit any program content'.
   $permissions['edit any program content'] = array(
     'name' => 'edit any program content',
@@ -937,17 +884,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
   // Exported permission: 'edit own course content'.
   $permissions['edit own course content'] = array(
     'name' => 'edit own course content',
-    'roles' => array(
-      'SERVICE ACCOUNT' => 'SERVICE ACCOUNT',
-      'administrator' => 'administrator',
-      'staff' => 'staff',
-    ),
-    'module' => 'node',
-  );
-
-  // Exported permission: 'edit own instructional_model content'.
-  $permissions['edit own instructional_model content'] = array(
-    'name' => 'edit own instructional_model content',
     'roles' => array(
       'SERVICE ACCOUNT' => 'SERVICE ACCOUNT',
       'administrator' => 'administrator',
@@ -1271,51 +1207,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'accessibility',
   );
 
-  // Exported permission: 'view author options'.
-  $permissions['view author options'] = array(
-    'name' => 'view author options',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view body options'.
-  $permissions['view body options'] = array(
-    'name' => 'view body options',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view comment preview button'.
-  $permissions['view comment preview button'] = array(
-    'name' => 'view comment preview button',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view comment settings'.
-  $permissions['view comment settings'] = array(
-    'name' => 'view comment settings',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view delete button'.
-  $permissions['view delete button'] = array(
-    'name' => 'view delete button',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
   // Exported permission: 'view lmsless bar'.
   $permissions['view lmsless bar'] = array(
     'name' => 'view lmsless bar',
@@ -1327,9 +1218,9 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'cis_lmsless',
   );
 
-  // Exported permission: 'view lmsless cis link'.
-  $permissions['view lmsless cis link'] = array(
-    'name' => 'view lmsless cis link',
+  // Exported permission: 'view lmsless administration links'.
+  $permissions['view lmsless administration links'] = array(
+    'name' => 'view lmsless administration links',
     'roles' => array(
       'administrator' => 'administrator',
       'instructor' => 'instructor',
@@ -1348,15 +1239,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'lti_tool_provider',
   );
 
-  // Exported permission: 'view menu options'.
-  $permissions['view menu options'] = array(
-    'name' => 'view menu options',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
   // Exported permission: 'view own unpublished content'.
   $permissions['view own unpublished content'] = array(
     'name' => 'view own unpublished content',
@@ -1366,42 +1248,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
       'staff' => 'staff',
     ),
     'module' => 'node',
-  );
-
-  // Exported permission: 'view path options'.
-  $permissions['view path options'] = array(
-    'name' => 'view path options',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view preview button'.
-  $permissions['view preview button'] = array(
-    'name' => 'view preview button',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view revision information'.
-  $permissions['view revision information'] = array(
-    'name' => 'view revision information',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view revision log textarea'.
-  $permissions['view revision log textarea'] = array(
-    'name' => 'view revision log textarea',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
   );
 
   // Exported permission: 'view revisions'.
@@ -1415,24 +1261,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
     'module' => 'node',
   );
 
-  // Exported permission: 'view submit button'.
-  $permissions['view submit button'] = array(
-    'name' => 'view submit button',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
-  // Exported permission: 'view teaser controls'.
-  $permissions['view teaser controls'] = array(
-    'name' => 'view teaser controls',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
-  );
-
   // Exported permission: 'view the administration theme'.
   $permissions['view the administration theme'] = array(
     'name' => 'view the administration theme',
@@ -1441,15 +1269,6 @@ function cis_default_permissions_defaultconfig_user_default_permissions() {
       'authenticated user' => 'authenticated user',
     ),
     'module' => 'system',
-  );
-
-  // Exported permission: 'view user delete button'.
-  $permissions['view user delete button'] = array(
-    'name' => 'view user delete button',
-    'roles' => array(
-      'administrator' => 'administrator',
-    ),
-    'module' => 'jammer',
   );
 
   return $permissions;

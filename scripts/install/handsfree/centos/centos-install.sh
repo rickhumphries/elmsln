@@ -28,8 +28,10 @@ yes | yum update
 # using yum to install the main packages
 yes | yum -y install curl uuid patch git nano gcc make mysql mysql-server httpd
 # install php 5.5
-yes | yum -y --enablerepo=remi-php55 install php php-common php-opcache php-pecl-apcu php-cli php-pear php-pdo php-mysqlnd php-pgsql php-pecl-mongo php-sqlite php-pecl-memcache php-pecl-memcached php-gd php-mbstring php-mcrypt php-xml php-devel php-pecl-ssh2
-
+yes | yum -y --enablerepo=remi-php55 install php php-common php-opcache php-pecl-apcu php-cli php-pear php-pdo php-mysqlnd php-pgsql php-pecl-mongo php-sqlite php-pecl-memcache php-pecl-memcached php-gd php-mbstring php-mcrypt php-xml php-devel php-pecl-ssh2 php-pecl-yaml
+# docker
+yes | yum -y install docker docker-io docker-compose
+# development tools
 yes | yum groupinstall 'Development Tools'
 pecl channel-update pecl.php.net
 
@@ -74,6 +76,8 @@ yes | rm /etc/php.d/apc.ini
 # make an admin group
 groupadd admin
 groupadd elmsln
+# establish default mysql tables
+mysql_install_db
 # run the handsfree installer that's the same for all deployments
 # kick off hands free deployment
 bash /var/www/elmsln/scripts/install/handsfree/handsfree-install.sh 1 $1 $2 $3 $3 $3 data- $4 $5 $5 elmsln $6

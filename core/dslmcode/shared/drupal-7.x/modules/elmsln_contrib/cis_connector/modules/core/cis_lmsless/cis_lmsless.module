@@ -1,0 +1,633 @@
+<?php
+/**
+ * @file
+ * Code for CIS LMSless to place branding on page and create experience.
+ */
+
+include_once 'cis_lmsless.features.inc';
+
+/**
+ * Implements hook_permission().
+ */
+function cis_lmsless_permission() {
+  return array(
+    'view lmsless bar' =>  array(
+      'title' => t('View LMSless bar'),
+      'description' => t('Provides context as to what system you are in and quick links.'),
+    ),
+    'view lmsless administration links' =>  array(
+      'title' => t('View links to administrative tools'),
+      'description' => t('Show the links to other administrative tools in network flyout.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_page_build().
+ */
+function cis_lmsless_page_build(&$page) {
+  // make sure they have access to view this
+  if (user_access('view lmsless bar') && !path_is_admin(current_path())) {
+    $page['page_top']['cis_lmsless'] = array(
+      '#weight' => -10,
+      '#markup' => _cis_lmsless_assemble(),
+    );
+  }
+}
+
+/**
+ * Implements hook_admin_paths_alter().
+ */
+function cis_lmsless_admin_paths_alter(&$paths) {
+  // Do not treat user pages (i.e. edit) as needing administrative theme.
+  $paths['user/*'] = FALSE;
+}
+
+/**
+ * Callback to assemble network block variables
+ */
+function _cis_lmsless_assemble_network() {
+  // ensure this doesn't load when it doesn't have to
+  $vars = &drupal_static(__FUNCTION__);
+  if (!isset($vars)) {
+    $vars = array(
+      'front_page' => base_path() . variable_get('site_frontpage','node'),
+      'site_name' => variable_get('site_name', _cis_connector_course_context()),
+      'slogan' => variable_get('site_slogan', _cis_connector_course_context()),
+      'distro' => elmsln_core_get_profile_key(),
+      'lmsless_classes' => _cis_lmsless_get_distro_classes(),
+      'services' => array(),
+    );
+    $distro = $vars['distro'];
+    $reg = _cis_connector_build_registry();
+    // make sure this is in the registry
+    if (isset($reg[$distro])) {
+      $tmp = explode('.', $reg[$distro]['address']);
+      $machine_name = $tmp[0];
+      $title = (isset($reg[$distro]['default_title']) ? $reg[$distro]['default_title'] : '');
+    }
+    else {
+      $machine_name = $distro;
+      $title = $distro;
+    }
+    // account for the current service being worked on but not actually
+    // being actively used in the section in question
+    $current_url = $GLOBALS['base_url'] . '/';
+    $course_context = _cis_connector_course_context();
+    if (_cis_connector_system_type() == 'authority') {
+      $current_url .= $course_context;
+    }
+    $vars['active'] = array(
+      'title' => $title,
+      'url' => url($current_url),
+      'machine_name' => $machine_name,
+      'distro' => $vars['distro'],
+      'weight' => $reg[$distro]['weight'],
+      'icon' => $reg[$distro]['icon'],
+    );
+    // bring along anything custom added, then mix in on-demand items
+    if (!isset($vars['services'])) {
+      $list = $vars['services'];
+    }
+    // request a list of all other services that this section uses
+    if ($services = _cis_connector_transaction('other_services')) {
+      foreach ($services as $service) {
+        // ensure we don't get two of these to display
+        $list[$reg[$service['field_distribution']]['group']][$service['field_machine_name']] = array(
+          'title' => $service['title'],
+          'url' => url(_cis_connector_format_address($reg[$service['field_distribution']], '/' . $course_context, 'front')),
+          'machine_name' => $service['field_machine_name'],
+          'distro' => $service['field_distribution'],
+          'weight' => $reg[$service['field_distribution']]['weight'],
+          'icon' => $reg[$service['field_distribution']]['icon'],
+        );
+      }
+    }
+    // allow theme to override this if set
+    $theme_override = theme_get_setting('foundation_access_system_label');
+    if (!empty($theme_override)) {
+      $vars['active']['title'] = $theme_override;
+    }
+    // add in links to the Authority systems if permission exists
+    // @ignore druplart_conditional_assignment
+    if (user_access('view lmsless administration links') && is_array($reg)) {
+      foreach ($reg as $key => $value) {
+        if (!isset($value['show_in_network']) || (isset($value['show_in_network']) && $value['show_in_network'] == TRUE)) {
+          $addr = explode('.', $value['address']);
+          if ($value['type'] != 'service') {
+            // LRSs are outside network scope and don't have a context
+            // neither does piwik if we see that
+            $tmppath = '/';
+            if (strpos($key, '_') !== 0 && $value['type'] != 'custom' && $value['type'] != 'external') {
+              $tmppath .= $course_context;
+              $url = url(_cis_connector_format_address($reg[$key], $tmppath, 'front'));
+            }
+            else {
+              $url = $reg[$key]['protocol'] . '://' . $reg[$key]['address'];
+            }
+            $distrocolor = $key;
+            if (!isset($vars['lmsless_classes'][$key])) {
+              $distrocolor = '_default_';
+            }
+            $list[$value['group']][$addr[0]] = array(
+              'title' => $reg[$key]['default_title'],
+              'url' => $url,
+              'machine_name' => $addr[0],
+              'distro' => $distrocolor,
+              'weight' => $value['weight'],
+              'icon' => $value['icon'],
+            );
+          }
+        }
+      }
+
+      // service creation stuff inline
+      // @todo visualize this in a way that lets us quick trigger add services directly from here based on ones missing
+      if (!empty($course_context) && _cis_connector_role_grouping('staff')) {
+        $vars['service_option_link'] = _cis_connector_format_address($reg['cis'],  '/' . $course_context, 'front') . '/service-instances';
+      }
+    }
+    if (!empty($list)) {
+      // consistent ordering of the network flyout based on certain items we always want at the top and bottom
+      uksort($list, function($a, $b) {
+        switch ($a) {
+          case 'Network':
+            return -1;
+          break;
+          case 'Media':
+            if ($b != 'Network') {
+              return 1;
+            }
+            return -1;
+          break;
+          default:
+            if (in_array($b, array('Network', 'Media'))) {
+              return 1;
+            }
+            elseif (in_array($b, array('Administrative', 'Experimental'))) {
+              return -1;
+            }
+            else {
+              return strcmp($a, $b);
+            }
+          break;
+          case 'Administrative':
+            if ($b == 'Experimental') {
+              return -1;
+            }
+            else {
+              return 1;
+            }
+          break;
+          case 'Experimental':
+            return 1;
+          break;
+        }
+      });
+      // sort by title so that network icons are in alphabetical order
+      foreach ($list as &$order) {
+        usort($order, function($a, $b) {
+          if ($a['weight'] == $b['weight']) {
+            return strcmp($a['title'], $b['title']);
+          }
+          else {
+            return strcmp($a['weight'], $b['weight']);
+          }
+        });
+      }
+      $vars['services'] = $list;
+    }
+  }
+  return $vars;
+}
+
+/**
+ * Callback to assemble the bar
+ */
+function _cis_lmsless_assemble() {
+  // assemble variables for theming
+  $vars = _cis_lmsless_theme_vars();
+  drupal_add_css(drupal_get_path('module', 'cis_lmsless') . '/css/cis_lmsless.css');
+  return theme('cis_lmsless_bar', $vars);
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function cis_lmsless_form_masquerade_block_1_alter(&$form, &$form_state, $form_id) {
+  $section = _cis_connector_section_context();
+  // rename buttons
+  $form['submit'] = array(
+    '#value' => t('Emulate'),
+    '#type' => 'submit',
+    '#weight' => 10,
+  );
+  $form['elmsln_view_user'] = array(
+    '#value' => t('View'),
+    '#type' => 'button',
+    '#suffix' => '</div>',
+    '#weight' => 11,
+    '#attributes' => array('class' => array('grey', 'view-user-button')),
+  );
+  // push on additional validation handler
+  array_unshift($form['#validate'], 'cis_lmsless_form_masquerade_block_1_submit');
+  $form['masquerade_user_field']['#title'] = t('Account name');
+  // don't do these for the master section as it makes no sense
+  if ($section && !_cis_connector_is_master($section)) {
+    $form['masquerade_user_field']['#type'] = 'select';
+    $field_conditions = array();
+    // don't assume there is a section context when masquerade is enabled
+    if (module_exists('cis_section') && $gid = _cis_section_load_section_by_id($section)) {
+      $field_conditions = array('og_user_node' => array('target_id', array($gid), 'IN'));
+    }
+    // pull together the users
+    $users = _cis_connector_assemble_entity_list('user', 'user', 'name', 'name', $field_conditions);
+    $form['masquerade_user_field']['#options'] = $users;
+    unset($form['masquerade_user_field']['#size']);
+    unset($form['masquerade_user_field']['#autocomplete_path']);
+  }
+}
+
+/**
+ * Submit handler callback for our view user button
+ */
+function cis_lmsless_form_masquerade_block_1_submit($form, $form_state) {
+  // allow for going to user profile instead of masquerade
+  if ($form_state['triggering_element']['#value'] == 'View') {
+    // try to load the account; other things validated that they could and the worse
+    // case here is they get directed to an access denied
+    if ($tmp = user_load_by_name($form_state['values']['masquerade_user_field'])) {
+      // user path which will resolve to the pathauto path
+      drupal_goto('user/' . $tmp->uid);
+    }
+  }
+  else {
+    $_SESSION['about_to_masquerade'] = true;
+  }
+}
+
+/**
+ * Callback to return common theme variables when styling CIS theme components
+ * @return array array of variables to pass to the theme
+ */
+function _cis_lmsless_theme_vars() {
+  // ensure this doesn't load when it doesn't have to
+  $vars = &drupal_static(__FUNCTION__);
+  if (!isset($vars)) {
+    $lmsless_classes = _cis_lmsless_get_distro_classes();
+    $vars = array(
+      'front_page' => base_path() . variable_get('site_frontpage','node'),
+      'site_name' => variable_get('site_name', _cis_connector_course_context()),
+      'slogan' => variable_get('site_slogan', _cis_connector_course_context()),
+      'distro' => elmsln_core_get_profile_key(),
+      'lmsless_classes' => $lmsless_classes,
+      'course_context' => _cis_connector_course_context(),
+    );
+    // push this into variables on the page for usage
+    drupal_add_js(array('cis_lmsless' => $lmsless_classes, 'distro' => elmsln_core_get_profile_key()), array('type' => 'setting'));
+    // build in section context if we have one we can pull
+    if ($section = _cis_connector_section_context()) {
+      $vars['section'] = $section;
+      // do a full load so we can get at the title
+      // which could be in better form for interface presentation
+      if (module_exists('cis_section')) {
+        if ($nid = _cis_section_load_section_by_id($section)) {
+          $tmpnode = node_load($nid);
+          $vars['section_title'] = filter_xss($tmpnode->title);
+          // additional CIS data mix in for UX
+          $cisSectionData = _cis_connector_transaction('section', 'default', array(), $section);
+          if (isset($cisSectionData['host_entity']['field_semester']['und'][0]['value'])) {
+            $vars['section_title'] = strtoupper($cisSectionData['host_entity']['field_semester']['und'][0]['value']) . $cisSectionData['host_entity']['field_year']['und'][0]['value'] . ' - ' . $vars['section_title'];
+          }
+          // allow developers to hijack this / make it as they need displayed
+          drupal_alter('cis_lmsless_section_title', $vars['section_title'], $section, $cisSectionData);
+        }
+      }
+    }
+    // pull in the instructor contact info block
+    $vars['contact_block'] = cis_service_connection_block_instructor_contact();
+    // pull list of resources as an array
+    if (!empty($section)) {
+      $query = array('field_access_string' => $section, 'archived' => 0);
+      // request the section of the user
+      $cis_section_item = _cis_connection_query($query, 'field_collection_item');
+    }
+    else {
+      $cis_section_item = array();
+    }
+    // make sure it got data
+    $resources = array();
+    if (!empty($cis_section_item) && !empty($cis_section_item['list'])) {
+      $list = '';
+      if (isset($cis_section_item['list'][0]['field_resources'])) {
+        foreach ($cis_section_item['list'][0]['field_resources'] as $reid) {
+          $resource = _cis_connection_object($reid['id'], $reid['resource']);
+          $resources[$resource['field_machine_name']] = array(
+            'title' => check_plain($resource['title']),
+            'body' => check_markup($resource['body']['value'], $resource['body']['format'])
+          );
+          // check for tech support resource
+          if (strpos($resource['field_machine_name'], 'tech_support') === 0 || strpos($resource['field_machine_name'], 'techsupport') === 0) {
+            $vars['tech_support'] = $resources[$resource['field_machine_name']];
+          }
+        }
+      }
+    }
+    $vars['resources'] = $resources;
+    // throw in username
+    $vars['username'] = (isset($GLOBALS['user']->name) ? check_plain($GLOBALS['user']->name) : t("Anonymous"));
+    // build the remote banner URI, this is the best solution for an image
+    if ($picture = _elmsln_core_get_user_picture('avatar', $GLOBALS['user']->uid)) {
+      $vars['userpicture'] = $picture;
+    }
+    else {
+      $vars['usericon'] = 'social:person';
+    }
+    // available bar elements
+    $vars['bar_elements'] = array(
+      'network' => FALSE,
+      'user' => TRUE,
+      'help' => TRUE,
+      'resources' => TRUE,
+      'syllabus' => TRUE
+    );
+    // only show network links to people that should see them.
+    if (user_access('view lmsless administration links')) {
+      $vars['bar_elements']['network'] = TRUE;
+    }
+
+    // if authority, remove the syllabus
+    if (_cis_connector_system_type() == 'authority') {
+      $vars['bar_elements']['syllabus'] = FALSE;
+    }
+    // support people wiping help link via settings
+    $help_link = variable_get('cis_help_page', 'course-help');
+    if (empty($help_link)) {
+      $vars['bar_elements']['help'] = FALSE;
+    }
+    $vars['help_link'] = url($help_link);
+    // support people wiping resources link via settings
+    $resources_link = variable_get('cis_resource_page', 'resources');
+    if (empty($resources_link)) {
+      $vars['bar_elements']['resources'] = FALSE;
+    }
+    $vars['resources_link'] = url($resources_link);
+    // support people wiping syllabus link via settings
+    $syllabus_link = variable_get('cis_syllabus_page', 'syllabus');
+    if (empty($syllabus_link)) {
+      $vars['bar_elements']['syllabus'] = FALSE;
+    }
+    $vars['syllabus_link'] = url($syllabus_link);
+    // account for standard cross system menu
+    if (user_access('access elmsln administration areas')) {
+      $course_tools = menu_tree('menu-elmsln-settings');
+      $vars['elmsln_main_menu'] = render($course_tools);
+    }
+    else {
+      $vars['elmsln_main_menu'] = FALSE;
+    }
+    // NETWORK AND NETWORK BLOCK
+    $vars['network'] = _cis_lmsless_assemble_network();
+    // add custom network links
+    drupal_alter('cis_lmsless_network', $vars);
+    if (isset($vars['network']['services'])) {
+      foreach ($vars['network']['services'] as $category => $items) {
+        foreach ($items as $key => $item) {
+          // ensure icon isset, should be
+          if (!isset($item['icon'])) {
+            $vars['network']['services'][$category][$key]['icon'] = $item['machine_name'];
+          }
+          if (!isset($item['distro'])) {
+            $vars['network']['services'][$category][$key]['distro'] = '_default_';
+          }
+          if (!isset($item['icon_library'])) {
+            $vars['network']['services'][$category][$key]['icon_library'] = 'elmsln';
+          }
+          // do token replacements on url and title
+          $vars['network']['services'][$category][$key]['url'] = token_replace($item['url']);
+          // add another value for token replacement
+          $vars['network']['services'][$category][$key]['title'] = token_replace($item['title']);
+          // lowercase
+          $vars['network']['services'][$category][$key]['lowertitle'] = drupal_strtolower($vars['network']['services'][$category][$key]['title']);
+          // single letter
+          $vars['network']['services'][$category][$key]['singleletter'] = substr($vars['network']['services'][$category][$key]['lowertitle'], 0, 1);
+          ;
+        }
+      }
+    }
+    $vars['network_block'] = theme('cis_lmsless_network', $vars);
+    // USER AND USER BLOCK
+    $vars['username'] = (isset($GLOBALS['user']->name) ? check_plain($GLOBALS['user']->name) : t("Anonymous"));
+    $elmsln_global_profile = variable_get('elmsln_global_profile', 'cpr');
+    $uri = 'elmslnauthority://' . $elmsln_global_profile . '/users/photos/' . $vars['username'] .'.jpg';
+    // load in the user picture if it exists
+    if (file_exists(_elmsln_core_realpath($uri))) {
+      $image = theme('image', array(
+        'path' => $uri,
+        'alt' => t('Picture of @name', array('@name' => $vars['username'])),
+        'width' => '64px',
+        'height' => '64px',
+        'attributes' => array(
+          'class' => array('circle', 'elmsln-user-big-avatar', 'ferpa-protect'),
+        ),
+      ));
+      $image = str_replace('files/users', 'files/styles/foundation_access_profile/public/users', $image);
+      $vars['userpicturebig'] = $image;
+    }
+    else {
+      $vars['userpicturebig'] = '<paper-avatar label="' . $vars['username'] . '"></paper-avatar>';
+    }
+    // support user banner
+    $uri = 'elmslnauthority://' . $elmsln_global_profile . '/users/banners/' . $vars['username'] .'.jpg';
+    // load in the user picture if it exists
+    if (file_exists(_elmsln_core_realpath($uri))) {
+      $image = theme('image', array(
+        'path' => $uri,
+        'alt' => '',
+        'width' => '280px',
+        'height' => '210px',
+        'attributes' => array(
+          'class' => array('background', 'ferpa-protect'),
+        ),
+      ));
+      $image = str_replace('files/users', 'files/styles/foundation_access_user_bg/public/users', $image);
+      $vars['userbackground'] = $image;
+    }
+    else {
+      // load libraries to get materialize path
+      $libraries = libraries_get_libraries();
+      // @todo read off profile value from distributed profile in the future
+      if (isset($libraries['materialize'])) {
+        $vars['userbackground'] = '<img class="background" src="' .  base_path() . $libraries['materialize'] . '/images/office.jpg" alt="">';
+      }
+    }
+    // set a login link if we don't have a user name
+    if ($vars['username'] == t("Anonymous")) {
+      $vars['userlink'] = array(
+        'label' => t('Log in'),
+        'href'  => url('user/login'),
+        'class' => array(),
+        'icon'  => 'power-settings-new',
+        'hover-class' => array(
+          $vars['lmsless_classes'][$vars['distro']]['color'],
+          $vars['lmsless_classes'][$vars['distro']]['dark'],
+          'white-text'
+        ),
+      );
+    }
+    else {
+      $vars['userlink'] = array(
+        'label' => t('Log out'),
+        'href'  => url('user/logout'),
+        'class' => array(
+          'account-logout'
+        ),
+        'icon'  => 'power-settings-new',
+        'hover-class' => array(
+          $vars['lmsless_classes'][$vars['distro']]['color'],
+          $vars['lmsless_classes'][$vars['distro']]['dark'],
+          'white-text'
+        ),
+      );
+
+      $vars['userprofile'] = array(
+        'label' => t('My Profile'),
+        'href'  => url('user/' . $GLOBALS['user']->uid),
+        'class' => array(),
+        'icon'  => 'account-circle',
+        'hover-class' => array(
+          $vars['lmsless_classes'][$vars['distro']]['color'],
+          $vars['lmsless_classes'][$vars['distro']]['dark'],
+          'white-text'
+        ),
+      );
+    }
+    if (_cis_connector_role_groupings(array('staff','teacher')) || isset($_SESSION['masquerading'])) {
+      // account for systems without sections (like authorities)
+      if ($section) {
+        // ensure they can see the section switcher link
+        if (user_access('switch section context')) {
+          $section_form = drupal_get_form('cis_service_connection_block_section_context_changer_form');
+          $vars['user_section'] = drupal_render($section_form);
+        }
+      }
+      // render differently if the user is already masquerading
+      if (isset($_SESSION['masquerading'])) {
+        $vars['masquerade_logout'] = '<lrnsys-button label="' . t('revert (@name)', array('@name' => $GLOBALS['user']->name)) . '" href="' . url('masquerade/unswitch', array('query' => array('destination' => current_path(), 'token' => drupal_get_token('masquerade/unswitch')))) . '" icon="supervisor-account" hover-class="' . $vars['lmsless_classes'][$vars['distro']]['color'] . ' ' . $vars['lmsless_classes'][$vars['distro']]['dark'] . ' white-text"></lrnsys-button>';
+      }
+      else {
+        $tmp = module_invoke('masquerade', 'block_view', 'masquerade');
+        $vars['masquerade'] = render($tmp['content']);
+      }
+      // calculate roles
+      $tmproles = $GLOBALS['user']->roles;
+      unset($tmproles[1]);
+      unset($tmproles[2]);
+      // figure out how to present roles, don't assume there are roles
+      if (!empty($tmproles)) {
+        sort($tmproles);
+        $vars['user_roles'] = filter_xss(implode(', ', $tmproles));
+      }
+    }
+    // allow other projects to alter these values
+    drupal_alter('cis_lmsless_theme_vars', $vars);
+    $vars['user_block'] = theme('cis_lmsless_user', $vars);
+  }
+  return $vars;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function cis_lmsless_theme() {
+  return array(
+    'cis_lmsless_user' => array(
+      'variables' => array(
+        'section' => 'master',
+        'active' => array('title' => ''),
+        'tour' => url('guided_tour'),
+        'username' => t('Account'),
+        'userlink' => '',
+        'userpicturebig' => '<div class="ferpa-protect elmsln-icon icon-user"></div>',
+        'userbackground' => '<img class="background" src="' . $GLOBALS['base_url'] . '/sites/all/libraries/materialize/images/office.jpg" alt="">',
+        'masquerade' => '',
+        'user_roles' => '',
+        'user_section_form' => '',
+        ),
+      'render element' => 'element',
+      'template' => 'templates/cis-lmsless-user',
+    ),
+    'cis_lmsless_network' => array(
+      'variables' => array(
+        'front_page' => 'node',
+        'site_name' => t('Service'),
+        'section' => 'master',
+        'active' => array('title' => ''),
+        'services' => array(),
+        'tour' => url('guided_tour'),
+        'resources' => array(),
+        'tech_support' => array(),
+        ),
+      'render element' => 'element',
+      'template' => 'templates/cis-lmsless-network',
+    ),
+    'cis_lmsless_bar' => array(
+      'variables' => array(
+        'front_page' => 'node',
+        'site_name' => t('Service'),
+        'section' => 'master',
+        'active' => array('title' => ''),
+        'course_context' => '',
+        'help_link' => url('course-help'),
+        'resources_link' => url('resources'),
+        'syllabus_link' => url('syllabus'),
+        'username' => t('Account'),
+        'userpicture' => FALSE,
+        'usericon' => FALSE,
+        'resources' => array(),
+        'tech_support' => array(),
+        'elmsln_main_menu' => '',
+        'lmsless_classes' => array(),
+        'bar_elements' => array('network' => FALSE, 'user' => TRUE, 'help' => TRUE, 'resources' => TRUE, 'syllabus' => TRUE),
+      ),
+      'render element' => 'element',
+      'template' => 'templates/cis-lmsless-bar',
+    ),
+  );
+}
+
+/**
+ * Returns a color association for a distribution / tool in the network
+ */
+function _cis_lmsless_get_distro_classes($distro = NULL) {
+  // establish an empty series of classes
+  $empty = array(
+    'dark'   => 'darken-4',
+    'light'  => 'lighten-4',
+    'color' => 'blue',
+    'text' => 'black-text',
+    'outline' => 'blue-outline',
+    'code' => '#2196f3',
+    'color_code_dark' => '#0D47A1',
+    'code_text' => '#085390',
+  );
+  // statically cache future calls
+  $map = &drupal_static(__FUNCTION__);
+  if (!isset($map)) {
+    $map = array(
+      '_default_' => $empty,
+    );
+    // allow others to modify core color associations
+    drupal_alter('cis_lmsless_color', $map);
+  }
+  // see if we should return anything
+  if (isset($distro)) {
+    // if we don't know about this then return nothing
+    if (isset($map[$distro])) {
+      return $map[$distro];
+    }
+    return $empty;
+  }
+  // return everything
+  return $map;
+}

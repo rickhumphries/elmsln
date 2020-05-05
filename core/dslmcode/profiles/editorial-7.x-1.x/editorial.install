@@ -17,4 +17,41 @@ function editorial_install() {
   _elmsln_installer_post_install_cleanup();
   // set front page to the my posts view
   variable_set('site_frontpage', 'editorial/blog-posts/my');
+  // these need reverted after build
+  features_revert_module('editorial_blog_post');
+  features_revert_module('editorial_story_seeds');
+  features_revert_module('editorial_journal_entry');
+}
+
+
+/**
+ * Enable editorial user experience links
+ */
+function editorial_update_7001(&$sandbox) {
+  module_enable(array('editorial_ux'));
+  features_revert_module('editorial_journal_entry');
+}
+
+/**
+ * Clean up some menu item placements and better UX defaults for
+ * node entry forms for everyone.
+ */
+function editorial_update_7002(&$sandbox) {
+  features_revert_module('editorial_blog_post');
+  features_revert_module('editorial_ux');
+}
+
+/**
+ * Enable the service module so we can do things specific
+ * to services in the future.
+ */
+function editorial_update_7003(&$sandbox) {
+  module_enable(array('cis_course_service'));
+}
+
+/**
+ * xAPI tracking for view / duration stuff at least
+ */
+function editorial_update_7004(&$sandbox) {
+  module_enable(array('elmsln_lrs'));
 }

@@ -1,0 +1,553 @@
+<?php
+/**
+ * @file
+ * Code for the CLE Submission feature.
+ */
+
+include_once 'cle_submission.features.inc';
+include_once drupal_get_path('module', 'cle_open_studio_app') . '/apps/services/LRNAppOpenStudioSubmissionService.php';
+include_once drupal_get_path('module', 'cle_open_studio_app') . '/apps/services/LRNAppOpenStudioAssignmentService.php';
+
+/**
+ * Implements hook_menu().
+ */
+function cle_submission_menu() {
+  $items = array();
+  $items['api/v1/cle/submissions'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('submission', NULL, NULL),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/submissions/create'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('submission', NULL, 4),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/submissions/fields'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('submission', NULL, 4),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/submissions/%'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('submission', 4, 'query'),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/submissions/%/fields'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('submission', 4, 5),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/submissions/%/update'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('submission', 4, 'update'),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/submissions/%/delete'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('submission', 4, 'delete'),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['api/v1/cle/submissions/random-critique'] = array(
+    'page callback' => '_cle_critique_api_random_critique',
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_elmsln_jsapi_info().
+ */
+function cle_submission_elmsln_jsapi_info() {
+  // submissions api router
+  $items['submission'] = array(
+    'type'   => 'node',
+    'bundle' => 'cle_submission',
+    'modify' => '_cle_submission_v1_submission_modify',
+    'list'   => '_cle_submission_v1_get_submissions',
+    'output' => '_cle_submission_v1_submission_output',
+  );
+  return $items;
+}
+
+/**
+ * @todo
+ * Get all of the submissions for the current user
+ * - Make sure that they are seeing submissions for their current section
+ */
+function _cle_submission_v1_get_submissions($type, $filter = array()) {
+  $items = array();
+  $section_id = _cis_connector_section_context();
+  $section = _cis_section_load_section_by_id($section_id);
+  $field_conditions = array(
+    'og_group_ref' => array('target_id', $section, '='),
+  );
+  $property_conditions = array('status' => array(NODE_PUBLISHED, '='));
+  if (isset($filter['submission'])) {
+    $property_conditions['nid'] = array($filter['submission'], '=');
+  }
+  $orderby = array();
+  $items = _cis_connector_assemble_entity_list('node', 'cle_submission', 'nid', '_entity', $field_conditions, $property_conditions, $orderby);
+  return $items;
+}
+
+/**
+ * Helper function that prepares a submission for api output.
+ */
+function _cle_submission_v1_submission_output($node) {
+  global $base_url;
+  $account = $GLOBALS['user'];
+  $images = array();
+  if (!empty($node->field_images[LANGUAGE_NONE])) {
+    $images = $node->field_images[LANGUAGE_NONE];
+    foreach ($images as &$image) {
+      $image = _elmsln_api_v1_file_output($image);
+    }
+  }
+  $files = array();
+  if (!empty($node->field_files[LANGUAGE_NONE])) {
+    $files = $node->field_files[LANGUAGE_NONE];
+    foreach ($files as &$file) {
+      $file = _elmsln_api_v1_file_output($file);
+    }
+  }
+  // form metadata for our app to act on
+  $metadata = array(
+    'canUpdate' => 0,
+    'canDelete' => 0,
+    'canCritique' => 0,
+    'comments' => array(),
+  );
+  // support sending across comment count
+  if (isset($node->comment_count)) {
+    $metadata['comments']['count'] = $node->comment_count;
+    // figure out new comments
+    $metadata['comments']['new'] = comment_num_new($node->nid);
+  }
+  // see the operations they can perform here
+  if (entity_access('update', 'node', $node, $account)) {
+    $metadata['canUpdate'] = 1;
+  }
+  if (entity_access('delete', 'node', $node, $account)) {
+    $metadata['canDelete'] = 1;
+  }
+  // @todo need more advanced check then just this based on
+  // assignment methodology for critique
+  if (entity_access('view', 'node', $node, $account) && $node->uid != $account->uid) {
+    $metadata['canCritique'] = 1;
+  }
+  switch ($node->field_submission_state[LANGUAGE_NONE][0]['value']) {
+    case 'submission_in_progress':
+      $metadata['icon'] = 'assignment-late';
+      $metadata['color'] = 'amber lighten-3';
+    break;
+    case 'submission_ready':
+      $metadata['icon'] = 'done';
+      $metadata['color'] = 'green lighten-3';
+    break;
+    case 'submission_needs_work':
+      $metadata['icon'] = 'assignment-returned';
+      $metadata['color'] = 'yellow lighten-3';
+    break;
+    default:
+      $metadata['icon'] = 'assignment';
+      $metadata['color'] = 'grey lighten-3';
+    break;
+  }
+  // this will be our json formatted output
+  $return = array(
+    'id' => (int)$node->nid,
+    'uid' => (int)$node->uid,
+    'uuid' => $node->uuid,
+    'title' => $node->title,
+    'status' => (int)$node->status,
+    'created' => Date('c', $node->created),
+    'relatedSubmission' => (int)$node->field_related_submission[LANGUAGE_NONE][0]['target_id'],
+    'assignment' => (int)$node->field_assignment[LANGUAGE_NONE][0]['target_id'],
+    'evidence' => array(
+      'body' => $node->field_submission_text[LANGUAGE_NONE][0]['safe_value'],
+      'images' => $images,
+      'video' => $node->field_video[LANGUAGE_NONE],
+      'files' => $files,
+      'links' => $node->field_links[LANGUAGE_NONE],
+    ),
+    'energy' => array(
+      'timestamp' => Date('c', $node->field_energy[LANGUAGE_NONE][0]['radioactivity_timestamp']),
+      'value' => $node->field_energy[LANGUAGE_NONE][0]['radioactivity_energy'],
+    ),
+    'state' => $node->field_submission_state[LANGUAGE_NONE][0]['value'],
+    'section' => (int)$node->og_group_ref[LANGUAGE_NONE][0]['target_id'],
+    'links' => array(
+      'self' => $base_url . '/api/v1/cle/submissions/' . $node->nid,
+    ),
+    'metadata' => $metadata,
+  );
+
+  return $return;
+}
+
+/**
+ * ELMSLN JSapi callback for creating an assignment.
+ * @todo  make this use the full POST data sanitized and in params.
+ */
+function _cle_submission_v1_submission_modify($node, $params = NULL) {
+  if (!isset($node->nid)) {
+    $detail = t('Submission created');
+  }
+  else {
+    $detail = t('Submission updated');
+  }
+  // loop through supported parameters and set them for create or update
+  foreach ($params as $key => $value) {
+    // fields we support in a POST
+    switch ($key) {
+      case 'uid':
+      case 'uuid':
+      case 'title':
+      case 'status':
+        $node->{$key} = $value;
+      break;
+      case 'section':
+        if (!is_null($value)) {
+          $node->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $value;
+        }
+      break;
+      case 'state':
+        $node->field_submission_state[LANGUAGE_NONE][0]['value'] = $value;
+      break;
+      case 'relatedSubmission':
+        if (!is_null($value)) {
+          $node->field_related_submission[LANGUAGE_NONE][0]['target_id'] = $value;
+        }
+      break;
+      case 'assignment':
+        if (!is_null($value)) {
+          $node->field_assignment[LANGUAGE_NONE][0]['target_id'] = $value;
+        }
+      break;
+      case 'evidence':
+        foreach ($value as $key2 => $value2) {
+          switch ($key2) {
+            // html text area
+            case 'body':
+              $node->field_submission_text[LANGUAGE_NONE][0] = $value2;
+            break;
+            // file entity ids as the target_id entity reference handles the rest
+            case 'images':
+            case 'files':
+              // the app will send the full object each time in the event we would remove stuff
+              // so we'll need to do basically rebuild this in the event they would have
+              // added or removed stuff from the UI
+              $node->{'field_' . $key2}[LANGUAGE_NONE] = array();
+              // loop through the values that came across
+              foreach ($value2 as $item) {
+                $fid = NULL;
+                // see if this is just an int, means it came across previously
+                if (is_int($item)) {
+                  $fid = $item;
+                }
+                // if it was an array object, set it
+                elseif (isset($item['fid'])) {
+                  $fid = $item['fid'];
+                }
+                // ensure we got something by the end here
+                if (!is_null($fid)) {
+                  $node->{'field_' . $key2}[LANGUAGE_NONE][] = array('fid' => $fid);
+                }
+              }
+            break;
+            // youtube / vimeo / external video provider links
+            case 'video':
+              foreach ($value2 as $item) {
+                $node->{'field_' . $key2}[LANGUAGE_NONE][] = array('video_url' => $item);
+              }
+            break;
+            // item must have keys array('url' => '', 'title' =>'')
+            case 'links':
+              foreach ($value2 as $item) {
+                $node->{'field_' . $key2}[LANGUAGE_NONE][] = $item;
+              }
+            break;
+          }
+        }
+      break;
+    }
+  }
+  // ensure we don't have anonymous creation since it's not possible
+  if (!isset($node->uid) || $node->uid == 0) {
+    $node->uid = $GLOBALS['user']->uid;
+  }
+  node_save($node);
+  // output the newly created node
+  $vars = array(
+    'status' => '200',
+    'detail' => $detail,
+    'node' => (array) $node,
+  );
+  return $vars;
+}
+
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function cle_submission_form_cle_submission_node_form_alter(&$form, &$form_state, $form_id) {
+  // ensure this isn't loaded in an ajax callback
+  if (arg(0) != 'system') {
+    unset($form['field_submission_text']['und'][0]['summary']);
+    // make sure that its not set to the needs work state
+    // if it is then we need to allow anyone to see it so they could change it
+    // back to ready for review but not the "in progress" since this is just
+    // for a one time fix
+    if (isset($form['field_submission_state']['und']['#default_value'][0]) && $form['field_submission_state']['und']['#default_value'][0] == 'submission_needs_work') {
+      unset($form['field_submission_state']['und']['#options']['submission_in_progress']);
+    }
+    else {
+      // don't allow anyone to set this to needs work; this can only happen
+      // via the instructor in the gradebook
+      unset($form['field_submission_state']['und']['#options']['submission_needs_work']);
+    }
+    // try to pull from the default being set
+    if (isset($form['field_assignment']['und']['#default_value'][0])) {
+      $assignment = node_load($form['field_assignment']['und']['#default_value'][0]);
+    }
+    else {
+      $assignment = FALSE;
+    }
+    // ensure we have an assignment to work on before hiding items
+    if ($assignment) {
+      $path = drupal_get_path('module', 'cle_submission') . '/';
+      drupal_add_css($path . 'css/submission_form.css');
+      // fields that we allow to be optionally hidden
+      $hidden = array('field_images', 'field_video', 'field_submission_text', 'field_links', 'field_files');
+      // remove things we should allow to display
+      foreach ($assignment->field_assignment_artifacts['und'] as $field) {
+        unset($hidden[array_search($field['value'], $hidden)]);
+      }
+      // hide things that shouldn't be visible based on requirements of assignment
+      foreach ($hidden as $hide) {
+        $form[$hide]['#access'] = FALSE;
+        $tmpgroup = str_replace('field_', 'group_', $hide);
+        // hide / remove the grouping item if it exist
+        if (isset($form['#groups'][$tmpgroup])) {
+          unset($form['#group_children'][$tmpgroup]);
+        }
+        // hide the items that live in groups as well to prevent an error downstream
+        if (isset($form['#groups'][$tmpgroup])) {
+          unset($form['#group_children'][$hide]);
+        }
+      }
+    }
+  }
+
+}
+
+/**
+ * Implements hook_page_build().
+ */
+function cle_submission_page_build(&$page) {
+  $file = FALSE;
+  $path = drupal_get_path('module', 'cle_submission') . '/';
+  if ($node = menu_get_object('node')) {
+    if ($node->type == 'cle_submission') {
+      $file = 'submission';
+      drupal_add_css($path . 'css/' . $file . '.css');
+    }
+  }
+  else {
+    // add special js handling to the submissions overview
+    switch (arg(2)) {
+      case 'assignments':
+      case 'assignments-list':
+        $file = 'assignment_listing';
+        drupal_add_js($path . 'js/' . $file . '.js');
+        drupal_add_css($path . 'css/' . $file . '.css');
+      break;
+    }
+  }
+}
+
+/**
+ * Implements hook_node_access().
+ */
+function cle_submission_node_access($node, $op, $account) {
+  $submission_service = new LRNAppOpenStudioSubmissionService();
+  // allow for privacy value on the assignment to dictate who can see this
+  if ($op == 'view' && !_cis_connector_role_groupings(array('teacher', 'staff', 'webservice'), $account) && $node->type == 'cle_submission' && $node->uid != $account->uid) {
+    $visible = $submission_service->submissionVisibleToUser($node);
+    if (!$visible) {
+      return NODE_ACCESS_DENY;
+    }
+  }
+  return NODE_ACCESS_IGNORE;
+}
+
+/**
+ * Implements cle_submission_node_presave().
+ *
+ */
+function cle_submission_node_presave($node) {
+  // Check the parent assignment to find out what type of submission should be.
+  if ($node->type == 'cle_submission') {
+    $submission_service = new LRNAppOpenStudioSubmissionService();
+    $assignment_service = new LRNAppOpenStudioAssignmentService();
+
+    // ensure we have a parent assignment
+    if (!isset($node->field_assignment[LANGUAGE_NONE][0]['target_id'])) {
+      //throw new Exception(t('Submissions need to have a parent assignment.'));
+    }
+
+    // Make sure that the submissions parent assignment has it's dependencies met.
+    if (isset($node->field_assignment[LANGUAGE_NONE][0]['target_id'])) {
+      $assignment_id = $node->field_assignment[LANGUAGE_NONE][0]['target_id'];
+      $has_unmet_dependencies = $assignment_service->assignmentHasUnmetDependencies($assignment_id);
+      if ($has_unmet_dependencies) {
+        //throw new Exception(t('You must complete the previous assignment before you can submit assignment.'));
+      }
+    }
+
+    // figure out submission type
+    //$assignment = entity_load_single('node', $node->field_assignment[LANGUAGE_NONE][0]['target_id']);
+    //$assignment_emw = entity_metadata_wrapper('node', $assignment);
+    // Figure out critique method
+    $return = 'default';
+    /*if ($assignment_emw) {
+      $assignment_critique = $assignment_emw->field_critique_method->value();
+      if ($assignment_critique) {
+        if ($assignment_critique != 'none') {
+          $return = 'critique';
+        }
+      }
+    }*/
+    // store the submission type on the submission object
+    $node->field_submission_type[LANGUAGE_NONE][0]['value'] = $return;
+
+    // If this submission needs to have a critique submission automatically assigned to it
+    // then do it here.
+    // $critique_cle_critique_random($node->field_assignment[LANGUAGE_NONE][0]['target_id']);
+    /*if ($assignment_emw) {
+      $assignment_critique = $assignment_emw->field_critique_method->value();
+      if ($assignment_critique) {
+        if ($assignment_critique == 'random') {
+          // get the assignments dependency
+          $assignment_dependency_nid = $assignment_emw->field_assignment_dependencies->nid->value();
+          if ($assignment_dependency_nid) {
+            // Attempt to find a critique
+            $critique_submission = $submission_service->getSubmissionToCritique($assignment_dependency_nid);
+            // if we found one then we will assign to this submissions related submission.
+            if ($critique_submission) {
+              $node->field_related_submission[LANGUAGE_NONE][0]['target_id'] = $critique_submission->nid;
+            }
+            else {
+              throw new Exception(t('There are no submissions to critique at this time. Please check back later.'));
+            }
+          }
+          else {
+            throw new Exception(t('This assignment does not have a dependency that is needed for critiquing.'));
+          }
+        }
+      }
+    }*/
+  }
+}
+
+/**
+ * Return if a user has completed an assignment / has anything submitted for it.
+ */
+function _cle_submission_submission_status($assignment, $account = NULL) {
+  // load active account if not specified
+  if (is_null($account)) {
+    $account = $GLOBALS['user'];
+  }
+  $field_conditions = array();
+  // group ID
+  if ($gid = _cis_section_load_section_by_id(_cis_connector_section_context())) {
+      $field_conditions = array('og_group_ref' => array('target_id', array($gid), 'IN'));
+  }
+  $property_conditions = array(
+    'status' => array(NODE_PUBLISHED, '='),
+    'uid' => $account->uid,
+  );
+  $field_conditions['field_assignment'] = array('target_id', array($assignment->nid), 'IN');
+  // load results
+  $results = _cis_connector_assemble_entity_list('node', 'cle_submission', 'nid', '_entity', $field_conditions, $property_conditions);
+  $submissions = array();
+  $status = 0;
+  $submission = array();
+  $rationale['text'] = t('You have not submitted anything');
+  $rationale['code'] = 'submission-nosubmission';
+  $icon = 'assignment';
+  $color = 'grey lighten-4';
+  foreach ($results as $nid => $node) {
+    $submissions[$nid] = _cle_submission_v1_submission_output($node);
+    $submission = $submissions[$nid];
+    // check for a valid submission state
+    if (isset($node->field_submission_state[LANGUAGE_NONE][0]['value']) && $node->field_submission_state[LANGUAGE_NONE][0]['value'] == 'submission_ready') {
+      $status = 1;
+      $rationale['text'] = t('Submission accepted and ready for comment');
+      $rationale['code'] = 'submission-ready';
+    }
+    // faster way of getting the icon upstream in app
+    $icon = $submissions[$nid]['metadata']['icon'];
+    $color = $submissions[$nid]['metadata']['color'];
+  }
+  // if this still isn't valid but they have results, we need to say way
+  if ($status == 0 && !empty($results)) {
+    $rationale['text'] = t('Submission started but not available for comment');
+    $rationale['code'] = 'submission-notready';
+  }
+  // create a stub node to see if they can access this object
+  $node = _elmsln_api_stub_node('cle_submission');
+  // see if they CAN submit anything at this point
+  if (entity_access('create', 'node', $node, $account)) {
+    $canCreate = 1;
+  }
+  else {
+    $canCreate = 0;
+  }
+  return array(
+    'canCreate' => $canCreate,
+    'complete' => array(
+      'icon' => $icon,
+      'color' => $color,
+      'status' => $status,
+      'rationale' => $rationale,
+      'submission' => $submission,
+      'submissions' => $submissions,
+    ),
+  );
+}
+
+/**
+ * Helper function to figure out if the submission is being critiqued.
+ * @return array of submissions or false
+ */
+function _cle_submission_submission_being_critiqued($submission, $user = NULL) {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+    ->entityCondition('bundle', 'cle_submission')
+    ->fieldCondition('field_related_submission', 'target_id', $submission->nid, '=');
+  if ($user) {
+    $query->propertyCondition('uid', $user->uid);
+  }
+
+  $result = $query->execute();
+  if (isset($result['node'])) {
+    $submission_nids = array_keys($result['node']);
+    $submissions = entity_load('node', $submission_nids);
+    return $submissions;
+  }
+
+  return false;
+}

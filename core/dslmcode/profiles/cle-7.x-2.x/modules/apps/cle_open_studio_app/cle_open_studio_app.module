@@ -1,0 +1,72 @@
+<?php
+
+/**
+ * @file
+ * Code for the CLE Open Studio
+ */
+
+/**
+ * Implements hook_wrapped_paths().
+ */
+function cle_open_studio_app_wrapped_paths() {
+  $paths = array(
+    // don't wrap any app
+    'apps/*' => FALSE,
+  );
+  return $paths;
+}
+
+/**
+ * Callback for apps/open-studio/data.
+ * @param  string $machine_name machine name of this app
+ * @return array               data to be json encoded for the front end
+ */
+function _cle_open_studio_app_gallery_data($machine_name, $app_route, $params, $args) {
+  $return = array();
+  // @todo need to pull just the most recent submissions, 1 per project
+  // which might be too complex of logic for this efq to express
+  // get all submissions
+  // unique per project
+  // sort by most recent
+  // ... ugh... this is more complex then this
+  // pull together all the submissions they should be seeing
+  $data = _cis_connector_assemble_entity_list('node', 'cle_submission', 'nid', '_entity');
+  foreach ($data as $item) {
+    $images = array();
+    if (!empty($item->field_images)) {
+      foreach ($item->field_images['und'] as $image) {
+        $images[$image['fid']] = $image;
+        $images[$image['fid']]['src'] = file_create_url($image['uri']);
+      }
+    }
+    $return[$item->nid] = new stdClass();
+    $return[$item->nid]->title = $item->title;
+    $return[$item->nid]->comments = $item->comment_count;
+    $return[$item->nid]->author = $item->name;
+    $return[$item->nid]->images = $images;
+    $return[$item->nid]->url = base_path() . 'node/' . $item->nid . '?destination=' . $app_route;
+  }
+  return array(
+    'status' => 200,
+    'data' => $return
+  );
+}
+
+/**
+ * Implements hook_registry_files_alter().
+ */
+function cle_open_studio_app_registry_files_alter(&$files, $modules) {
+  // Manually add here as this is a feature and the .info may get overridden.
+  $files[] = drupal_get_path('module', 'cle_open_studio_app') . '/apps/services/LRNAppOpenStudioAssignmentService.php';
+  $files[] = drupal_get_path('module', 'cle_open_studio_app') . '/apps/services/LRNAppOpenStudioCommentService.php';
+  $files[] = drupal_get_path('module', 'cle_open_studio_app') . '/apps/services/LRNAppOpenStudioFileService.php';
+  $files[] = drupal_get_path('module', 'cle_open_studio_app') . '/apps/services/LRNAppOpenStudioProjectService.php';
+  $files[] = drupal_get_path('module', 'cle_open_studio_app') . '/apps/services/LRNAppOpenStudioSubmissionService.php';
+}
+
+/**
+ * Service function for apps to use to create, update and delete submissions
+ * @action
+ */
+function _cle_open_studio_app_submission_service($action) {
+}

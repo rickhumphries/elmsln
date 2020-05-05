@@ -1,0 +1,90 @@
+<?php
+/**
+ * @file
+ * Drupal needs this blank file.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function cis_unique_tag_menu() {
+  $items = array();
+  $items['cis-find-tag/%/%'] = array(
+    'page callback' => '_cis_unique_tag_lookup',
+    'page arguments' => array(1, 2),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Callback to find a tagged resource and redirect.
+ *
+ * @param $type
+ *   The type of entity you are looking for
+ * @param $tag
+ *   Tag / word to search for within this entity type.
+ */
+function _cis_unique_tag_lookup($type, $tag) {
+  $path = '<front>';
+  // need this to support multiple entity types
+  $type_info = entity_get_info($type);
+  $query = new EntityFieldQuery();
+  // pull all nodes
+  $query->entityCondition('entity_type', $type)
+    ->fieldCondition('field_cis_tag', 'value', $tag, '=');
+  // store results
+  $result = $query->execute();
+  // ensure we have results
+  if (isset($result[$type])) {
+    $ids = array_keys($result[$type]);
+    // only 1 result, load it and set location to uri resolver
+    if (count($ids) == 1) {
+      $entity = entity_load_single($type, $ids[0]);
+      $uri = entity_uri($type, $entity);
+      $path = $uri['path'];
+    }
+    else {
+      // load everything
+      $entities = entity_load($type, $ids);
+      // check for section being there though it should be
+      if (module_exists('cis_section')) {
+        // mooc is specialized here cause nodes aren't part of the group
+        if (elmsln_core_get_profile_key() == 'mooc') {
+          // load the active outline
+          $outline = _mooc_helper_active_outline();
+          // see which tagged item is in an active outline
+          foreach ($entities as $entity) {
+            if ($outline->nid == $entity->book['bid']) {
+              $uri = entity_uri($type, $entity);
+              $path = $uri['path'];
+            }
+          }
+        }
+        else {
+          $section = _cis_connector_section_context();
+          $gid = _cis_section_load_section_by_id($section);
+          // see if this is in the active group
+          foreach ($entities as $entity) {
+            if (isset($entity->og_group_ref) && !empty($entity->og_group_ref)) {
+              foreach ($entity->og_group_ref as $item) {
+                if ($item['target_id'] == $gid) {
+                  $uri = entity_uri($type, $entity);
+                  $path = $uri['path'];
+                }
+              }
+            }
+          }
+        }
+      }
+      else {
+        // multiple items, we don't know what to do, just serve first
+        $entity = entity_load_single($type, $ids[0]);
+        $uri = entity_uri($type, $entity);
+        $path = $uri['path'];
+      }
+    }
+  }
+  drupal_goto($path);
+}

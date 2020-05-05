@@ -1,0 +1,181 @@
+<?php
+/**
+ * @file
+ * Code for the MOOC Nav Block feature.
+ */
+
+include_once 'mooc_nav_block.features.inc';
+
+/**
+ * Implements hook_page_alter().
+ */
+function mooc_nav_block_page_alter(&$page) {
+  if (isset($page['content']['mooc_nav_block_mooc_nav']) && isset($page['content']['system_main']['nodes'])) {
+    $keys = array_keys($page['content']['system_main']['nodes']);
+    $nid = array_shift($keys);
+    $page['content']['system_main']['nodes'][$nid]['mooc_nav_block_mooc_nav'] = $page['content']['mooc_nav_block_mooc_nav'];
+    unset($page['content']['mooc_nav_block_mooc_nav']);
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function mooc_nav_block_block_info() {
+  $blocks['mooc_nav'] = array(
+    'info' => t('MOOC Navigation'),
+    'cache' => DRUPAL_CACHE_PER_PAGE,
+  );
+
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function mooc_nav_block_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'mooc_nav':
+      $node = menu_get_object('node');
+      if (isset($node) && isset($node->book) && isset($node->book['depth']) && !empty($node->book['depth'])) {
+        $block = _mooc_nav_block_mooc_nav_block($node);
+      }
+      elseif (arg(0) == 'apps' && arg(1) == 'lrnapp-book' && isset($GLOBALS['moocappbook'])) {
+        $block = _mooc_nav_block_mooc_nav_block($GLOBALS['moocappbook']);
+      }
+      // fallback if we're not on a node and it's not a mooc specific page
+      elseif (arg(0) != 'mooc' && arg(0) != 'user' && $node = _mooc_helper_active_outline()) {
+        $block = _mooc_nav_block_mooc_nav_block($node);
+      }
+    break;
+  }
+  return $block;
+}
+
+/**
+ * Assemble the nav block.
+ * @return array
+ */
+function _mooc_nav_block_mooc_nav_block($node) {
+  $block = array();
+  $output = '';
+  // make sure nav isset at all
+  $nav = _mooc_nav_block_get_nav($node);
+  // default config that nav options will modify
+  $config = array(
+    'active_trail' => array($nav['parent'], $node->book['mlid']),
+    'conditions' => array('plid' => $nav['parent']),
+  );
+  // process $nav array modifying the config for building the
+  switch ($nav['type']) {
+    case 'content-outline':
+      $config['conditions'] = array('plid' => $node->book['mlid']);
+      $config['min_depth'] = $node->book['depth'];
+      $config['max_depth'] = 9;
+    break;
+    case 'content-outline-active-current':
+      if ($nav['display'] == 'here-below' && $node->book['mlid'] == $nav['parent']) {
+        $config['conditions'] = array('plid' => $node->book['mlid']);
+        $config['min_depth'] = $node->book['depth']+1;
+        $config['max_depth'] = $node->book['depth']+1;
+      }
+      else {
+        $config['min_depth'] = $node->book['depth'];
+        $config['max_depth'] = $node->book['depth'];
+      }
+    break;
+    case 'content-outline-active-below':
+      $config['min_depth'] = $node->book['depth']+1;
+      $config['max_depth'] = $node->book['depth']+1;
+      // do nothing else if here and below is set and we are the page setting it
+      if ($nav['display'] == 'here-below' && $node->book['mlid'] == $nav['parent']) {
+
+      }
+      // if we are here only but NOT the page setting it we need to render nothing
+      elseif ($nav['display'] == 'here' && $node->book['mlid'] != $nav['parent']) {
+        return array();
+      }
+      // if we are something else (here and below but NOT on the parent itself probably)
+      // then we need to render things from the current page down since it is active below
+      // 1 level
+      else {
+        $config['conditions'] = array('plid' => $node->book['mlid']);
+      }
+    break;
+  }
+  // menu tree as needed
+  $children = menu_build_tree($node->book['menu_name'], $config);
+  if (!empty($nav['custom_text'])) {
+    $output = $nav['custom_text'];
+  }
+  $tree = menu_tree_output($children);
+  if (module_exists('foundation_access_ux') && isset($node->body['und'][0]['value']) && isset($node->book['mlid'])) {
+    $content = check_markup($node->body['und'][0]['value'], $node->body['und'][0]['format']);
+    // target the scrollspy template style
+    $search = '/<h([1-4])(.*?)>(.*?)<\/h(.*?)>/s';
+    // pregmatch the anchor and title for the heading
+    preg_match_all($search, $content, $results);
+    // ensure we have headings in the body of the document
+    if (count($results) == 5 && count($results[0]) > 1) {
+      // loop through items found
+      $scrollspy = '<ul id="scrollspy-nav" class="scrollspy-toc table-of-contents white"><li class="scrollspy-label scrollspy-link"><a tabindex="-1"  href="#main-content" class="scrollspy-link black-text"><paper-button>' . $node->title . '</paper-button></li>';
+      foreach ($results[0] as $key => $result) {
+        $tmp = strip_tags(trim($results[3][$key]));
+        if (!empty($tmp)) {
+          $scrollspy .= '<li class="scrollspy-depth"><a tabindex="-1" class="scrollspy-link black-text" href="#' . hash('md5', 'h' . $key) . '"><paper-button>' . $tmp . '</paper-button></a></li>';
+        }
+      }
+      $scrollspy .= '</ul>';
+      // append below the item if there is one to do so, otherwise it's at the top
+      if (!$node->book['has_children']) {
+        $tree[$node->book['mlid']]['#below'] = array(
+          '#markup' => $scrollspy,
+        );
+      }
+      else {
+        $output .= $scrollspy;
+      }
+    }
+  }
+  // @todo may need to hijack the theme suggestion here
+  $output .= drupal_render($tree);
+  $block['subject'] = $nav['label'];
+  $block['content'] = $output;
+  $block['mooc_nav'] = $nav;
+
+  return $block;
+}
+
+/**
+ * Assemble the nav style if it exists for this node
+ * @return array the properties of nav
+ */
+function _mooc_nav_block_get_nav($node) {
+  // set default
+  $nav = array(
+    'parent' => $node->book['mlid'],
+    'display' => 'here-below',
+    'style' => 'block-left',
+    'type' => 'content-outline-active-below',
+    'label' => (isset($node->field_mooc_nav_label[LANGUAGE_NONE][0]['value']) ? $node->field_mooc_nav_label[LANGUAGE_NONE][0]['value'] : t('Contents')),
+    'custom_text' => (isset($node->field_mooc_nav_custom_text[LANGUAGE_NONE][0]['value']) ? $node->field_mooc_nav_custom_text[LANGUAGE_NONE][0]['value'] : ''),
+  );
+  if ($nav['label'] == t('Contents')) {
+    if (!$node->book['has_children']) {
+      // load the parent of the current item
+      $cache = _book_cache_get_associations($node->book);
+      $nav['label'] = $cache['parent']['link_title'];
+    }
+    else {
+      $nav['label'] = $node->book['link_title'];
+    }
+  }
+  if (!$node->book['has_children']) {
+    $nav['type'] = 'content-outline-active-current';
+    $nav['display'] = 'here';
+    $nav['parent'] = $node->book['plid'];
+  }
+  return $nav;
+}

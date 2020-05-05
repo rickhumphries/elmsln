@@ -1,0 +1,127 @@
+<?php
+/**
+ * @file
+ * Install CIS Section.
+ */
+
+/**
+ * Implements hook_update_N().
+ *
+ * Fix master_ concept to be 'master' everywhere and all
+ * services will have a master section concept.
+ */
+function cis_section_update_7001(&$sandbox) {
+  $query = new EntityFieldQuery();
+  // pull all nodes
+  $query->entityCondition('entity_type', 'node')
+  // that are sections
+  ->entityCondition('bundle', 'section')
+  // where it looks like the old master format
+  ->fieldCondition('field_section_id', 'value', 'master_%', 'like')
+  // load all possible results in system, should only be 1 though
+  ->addMetaData('account', user_load(1));
+  // store result
+  $result = $query->execute();
+  // ensure we have results
+  if (isset($result['node'])) {
+    $nids = array_keys($result['node']);
+    $sections = entity_load('node', $nids);
+    // loop through the sections
+    foreach ($sections as $section) {
+      $section->field_section_id[LANGUAGE_NONE][0]['value'] = 'master';
+      // save the change so "master_" goes away
+      node_save($section);
+    }
+  }
+}
+
+/**
+ * Implements hook_update_N().
+ *
+ * Fix for section default value changing to FALSE
+ * instead of the NO_SECTION or 'default' values
+ * that were previously possible.
+ */
+function cis_section_update_7002(&$sandbox) {
+  $tmp = variable_get('cis_section_default', FALSE);
+  if ($tmp == 'default' || $tmp == 'NO_SECTION') {
+    variable_set('cis_section_default', FALSE);
+  }
+}
+
+/**
+ * Revert section to make this view strain the server less when
+ * working in larger environments.
+ */
+function cis_section_update_7003(&$sandbox) {
+  features_revert_module('cis_section');
+}
+
+/**
+ * Revert views component of cis_section
+ */
+function cis_section_update_7004(&$sandbox) {
+  features_revert(array('cis_section' => array('views')));
+}
+
+/**
+ * Revert views component of cis_section updated caching to content-based
+ */
+function cis_section_update_7005(&$sandbox) {
+  features_revert(array('cis_section' => array('views')));
+}
+
+/**
+ * Revert views component of cis_section updated caching to content-based
+ */
+function cis_section_update_7006(&$sandbox) {
+  features_revert(array('cis_section' => array('views')));
+}
+
+/**
+ * Get OG roles in place with the correct ones, then get rid of
+ * the faculty / lead faculty roles.
+ */
+function cis_section_update_7007(&$sandbox) {
+  if ($role = _cis_section_og_role_load_by_name('Faculty')) {
+    og_role_delete($role->rid);
+  }
+  if ($role = _cis_section_og_role_load_by_name('Lead Faculty')) {
+    og_role_delete($role->rid);
+  }
+  features_revert_module('cis_section');
+}
+
+/**
+ * Support OG Context now that we've got it mapped correctly.
+ */
+function cis_section_update_7008(&$sandbox) {
+  module_enable(array('og_context'));
+  features_revert_module('cis_section');
+}
+
+/**
+ * Sort OG memberships alphabetically so its sorted at all.
+ */
+function cis_section_update_7009(&$sandbox) {
+  features_revert_module('cis_section');
+}
+
+/**
+ * Hide book and path operations for sections. This form should be vanilla as possible.
+ */
+function cis_section_update_7010(&$sandbox) {
+  features_revert_module('cis_section');
+}
+
+/**
+ * Clean up OG section field_name once and for all
+ */
+function cis_section_update_7011(&$sandbox) {
+  features_revert_module('cis_section');
+  field_delete_field('og_user_node1');
+  field_delete_field('og_user_node2');
+  // actually deletes the fields
+  field_purge_batch(1000);
+  field_purge_batch(1000);
+}

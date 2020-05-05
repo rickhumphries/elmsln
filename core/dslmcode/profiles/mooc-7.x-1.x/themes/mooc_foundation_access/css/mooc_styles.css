@@ -1,49 +1,574 @@
-.magellan-wrap.fixed {
-  top: 2rem !important;
+/**
+ * Other code, probably hacks
+ */
+mooc-content {
+  min-height:90vh;
+}
+mooc-content article {
+  margin: 2em 0 0 .5em;
+}
+cms-hax {
+  outline: 1px dashed #CCCCCC;
+  outline-offset: 16px;
+  transition: .6s all linear;
+  -webkit-transition: .6s all linear;
+  -moz-transition: .6s all linear;
+  -ms-transition: .6s all linear;
+  -o-transition: .6s all linear;
+}
+
+cms-hax::before {
+  transition: .3s all linear;
+  content: "Content area";
+  top: 0;
+  left: 0;
+  font-size: 10px;
+  font-style: italic;
+  display: block;
+  position: absolute;
+  z-index: 1;
+  margin: -34px 0 0 -5px;
+  background-color: #CCCCCC;
+  color: #000000;
+  padding: 4px;
+  line-height: 10px;
+  opacity: 1;
+  visibility: visible;
+  -webkit-transition: .3s all linear;
+  -moz-transition: .3s all linear;
+  -ms-transition: .3s all linear;
+  -o-transition: .3s all linear;
+}
+
+cms-hax:hover {
+  outline: 1px dashed #FFFFFF;
+}
+cms-hax:hover::before {
+ background-color: #FFFFFF;
+ color: #FFFFFF;
+ visibility: hidden;
+ opacity: 0;
+}
+.page-op-button lrnsys-drawer#embedcontent {
+  --lrnsys-drawer-button-padding: 0 16px;
+  width: 64px;
+  height: 48px;
+  text-align: center;
+  line-height: 48px;
+}
+.outline-designer-page-operations {
+  margin: -3.5em 0 0 0;
+  display: table;
+}
+#outlineoptions {
+  padding: .2em;
+}
+#outline-tip paper-button {
+  padding: 0;
+  margin: 0;
+}
+#outlinepopover {
+  height: 48px;
+  vertical-align: middle;
+  line-height: 48px;
+  padding: 0 .75em;
+}
+#outlinepopover:hover,
+#outlinepopover:focus,
+#outlinepopover:active {
+  background-color: var(--elmsln-system-color-text);
+  color: white;
+}
+#outlinepopover paper-button {
+  text-transform: unset;
+  border-radius: 0;
+  border-bottom: 2px solid black;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+}
+
+.node-view-mode-full .card-panel, .card {
+  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2);
+}
+.node-view-mode-full .card-panel {
+  transition: box-shadow .25s;
+  padding: 20px;
+  margin: 0.5rem 0 1rem 0;
+  border-radius: 2px;
+  background-color: #fff;
+}
+
+.node-view-mode-full .card {
+  position: relative;
+  margin: 0.5rem 0 1rem 0;
+  background-color: #fff;
+  transition: box-shadow .25s;
+  border-radius: 2px;
+}
+
+.node-view-mode-full .card .card-title {
+  font-size: 24px;
+  font-weight: 300;
+}
+
+.node-view-mode-full .card .card-title.activator {
+  cursor: pointer;
+}
+
+.node-view-mode-full .card .card-content {
+  padding: 20px;
+  border-radius: 0 0 2px 2px;
+}
+
+.node-view-mode-full .card .card-content p {
+  margin: 0;
+  color: inherit;
+}
+
+.node-view-mode-full .card .card-content .card-title {
+  line-height: 48px;
+}
+
+.node-view-mode-full .card .card-action {
+  position: relative;
+  background-color: inherit;
+  border-top: 1px solid rgba(160, 160, 160, 0.2);
+  padding: 20px;
+}
+
+.node-view-mode-full .card .card-action a:not(.btn):not(.btn-large):not(.btn-floating) {
+  color: #ffab40;
+  margin-right: 20px;
+  transition: color .3s ease;
+  text-transform: uppercase;
+}
+
+.node-view-mode-full .card .card-action a:not(.btn):not(.btn-large):not(.btn-floating):hover {
+  color: #ffd8a6;
+}
+
+.node-view-mode-full .card .card-reveal {
+  padding: 20px;
+  position: absolute;
+  background-color: #fff;
+  width: 100%;
+  overflow-y: auto;
+  left: 0;
+  top: 100%;
+  height: 100%;
+  z-index: 3;
+  display: none;
+}
+
+.node-view-mode-full .card .card-reveal .card-title {
+  cursor: pointer;
+  display: block;
+}
+
+/* Panels */
+.node-view-mode-full .panel {
+  border-style: solid;
+  border-width: 1px;
+  border-color: #d8d8d8;
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+  background: #f2f2f2;
+  color: #333333; }
+  .node-view-mode-full .panel > :first-child {
+    margin-top: 0; }
+  .node-view-mode-full .panel > :last-child {
+    margin-bottom: 0; }
+  .node-view-mode-full .panel h1, .panel h2, .panel h3, .panel h4, .panel h5, .panel h6, .panel p, .panel li, .panel dl {
+    color: #333333; }
+  .node-view-mode-full .panel h1, .panel h2, .panel h3, .panel h4, .panel h5, .panel h6 {
+    line-height: 1;
+    margin-bottom: 0.625rem; }
+    .node-view-mode-full .panel h1.subheader, .panel h2.subheader, .panel h3.subheader, .panel h4.subheader, .panel h5.subheader, .panel h6.subheader {
+      line-height: 1.4; }
+  .node-view-mode-full .panel.callout {
+    border-style: solid;
+    border-width: 1px;
+    border-color: #d8d8d8;
+    margin-bottom: 1.25rem;
+    padding: 1.25rem;
+    background: #ecfaff;
+    color: #333333; }
+    .node-view-mode-full .panel.callout > :first-child {
+      margin-top: 0; }
+    .node-view-mode-full .panel.callout > :last-child {
+      margin-bottom: 0; }
+    .node-view-mode-full .panel.callout h1, .panel.callout h2, .panel.callout h3, .panel.callout h4, .panel.callout h5, .panel.callout h6, .panel.callout p, .panel.callout li, .panel.callout dl {
+      color: #333333; }
+    .node-view-mode-full .panel.callout h1, .panel.callout h2, .panel.callout h3, .panel.callout h4, .panel.callout h5, .panel.callout h6 {
+      line-height: 1;
+      margin-bottom: 0.625rem; }
+      .node-view-mode-full .panel.callout h1.subheader, .panel.callout h2.subheader, .panel.callout h3.subheader, .panel.callout h4.subheader, .panel.callout h5.subheader, .panel.callout h6.subheader {
+        line-height: 1.4; }
+    .node-view-mode-full .panel.callout a:not(.button) {
+      color: #008CBA; }
+      .node-view-mode-full .panel.callout a:not(.button):hover, .panel.callout a:not(.button):focus {
+        color: #0078a0; }
+  .node-view-mode-full .panel.radius {
+    border-radius: 3px; }
+
+.mooc-banner-image-wrapper {
+  margin: 0 0 2rem 0;
+}
+
+.content-outline-navigation a {
+  color: #333; }
+
+.content-outline-navigation h2 {
+  color: #333;
+  display: -ms-inline-flexbox;
+  display: inline-flex;
+  text-transform: uppercase;
+  font-size: 1.3rem;
+  padding: 0.9375rem 0 0.9375rem 0;
+  margin: 0.9375rem 1rem 0.9375rem 0; }
+  @media only screen and (max-width: 40em) {
+    .content-outline-navigation h2 {
+      max-width: 48%; } }
+  @media only screen and (min-width: 40.063em) {
+    .content-outline-navigation h2 {
+      max-width: 16rem; } }
+
+.content-outline-navigation h3 {
+  color: #4d4d4d;
+  display: -ms-inline-flexbox;
+  display: inline-flex;
+  margin: 0;
+  padding: 0.9375rem 0 0.9375rem 1rem;
+  border-left: 2px solid #1a1a1a;
+  font-size: 1rem;
+  text-align: left; }
+  @media only screen and (max-width: 40em) {
+    .content-outline-navigation h3 {
+      max-width: 48%; } }
+  @media only screen and (min-width: 40.063em) {
+    .content-outline-navigation h3 {
+      max-width: 16rem; } }
+
+.content-outline-navigation h4 {
+  margin: 0 0 1.875rem 1.875rem; }
+
+.content-outline-navigation ul.accordion {
+  margin: 0.5rem; }
+
+.content-outline-navigation .accordion .accordion-navigation > .content.active,
+.content-outline-navigation .accordion dd > .content.active {
+  background-color: transparent;
+  padding: 0; }
+
+.content-outline-navigation .accordion .accordion-navigation > a,
+.content-outline-navigation .accordion dd > a {
+  background: transparent; }
+
+.content-outline-navigation .left-submenu .back > a {
+  background: transparent;
+  text-align: center;
+  padding: 0;
+  margin: 0 2rem;
+  border: none; }
+
+.outline-nav-icon {
+  opacity: .8;
+  width: 2.5rem;
+  height: 2.5rem;
+  line-height: 2.5rem;
+  margin: 0;
+}
+
+#block-mooc-nav-block-mooc-nav-nav {
+  padding: .5em;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  font-size: .75rem;
+  background-color: #F5F5F5;
+  padding: 0;
+  float: none;
+  margin-bottom: 2em; }
+  #block-mooc-nav-block-mooc-nav-nav h3 {
+    font-size: 1.2em;
+    padding: .5em; }
+  #block-mooc-nav-block-mooc-nav-nav ul {
+    margin: 0;
+    padding: 0; }
+    #block-mooc-nav-block-mooc-nav-nav ul li {
+      margin: 0;
+      padding: 0; }
+      #block-mooc-nav-block-mooc-nav-nav ul li:hover {
+        background-color: transparent; }
+
+#block-mooc-nav-block-mooc-nav-nav ul li a {
+  display: -ms-flexbox;
+  display: flex;
+  margin: 0;
+  padding: 0;
+  line-height: 2.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #000000;
+  font-size: 1rem;
+}
+
+#block-mooc-nav-block-mooc-nav-nav lrnsys-button paper-button iron-icon,
+#block-mooc-nav-block-mooc-nav-nav lrnsys-button paper-button lrn-icon {
+  margin: 0;
+}
+
+/* Special accounting for the page layout when on the lrnapp-book */
+
+#block-mooc-nav-block-mooc-nav-nav li.elmsln-book-item paper-button {
+  border-radius: unset;
+  text-transform: unset;
+}
+#block-mooc-nav-block-mooc-nav-nav li.elmsln-book-item lrnsys-button {
+  padding-left: 0;
+  overflow: hidden;
+}
+#block-mooc-nav-block-mooc-nav-nav li.elmsln-book-item lrnsys-button.x-scope {
+  padding-left: unset;
+}
+
+#block-mooc-nav-block-mooc-nav-nav li.elmsln-book-item.elmsln-icon paper-button,
+#block-mooc-nav-block-mooc-nav-nav li.elmsln-book-item lrnsys-button.has-children paper-button{
+  padding-left: .25rem;
+}
+.elmsln-book-item.elmsln-icon:before {
+  position: absolute;
+  font-size: 1.3rem;
+  line-height: 2.4rem;
+  margin: 0 0 0 -.4rem;
+  padding: 0 0 0 0.1rem;
+  height: 2.4rem;
+  width: 1rem;
+  vertical-align: middle;
+}
+#block-mooc-nav-block-mooc-nav-nav ul li a.active {
+  font-weight: bold;
+}
+#block-mooc-nav-block-mooc-nav-nav ul li {
+  background-color: #E5E5E5;
+}
+#block-mooc-nav-block-mooc-nav-nav ul#scrollspy-nav li {
+  background-color: #FFFFFF;
+  overflow: hidden;
+  padding-left: 3em;
+}
+#scrollspy-nav li {
+    padding: 0;
+}
+#block-mooc-nav-block-mooc-nav-nav ul li.past-page {
+  background-color: #F5F5F5;
+}
+#block-mooc-nav-block-mooc-nav-nav ul li.active-trail {
+  background-color: #FFFFFF;
+  border-style: solid;
+  border-width: 2px;
+  margin: 0 -1px;
+}
+#block-mooc-nav-block-mooc-nav-nav ul li.last.active-trail {
+  border-bottom: none;
+}
+#block-mooc-nav-block-mooc-nav-nav ul li:hover,
+#block-mooc-nav-block-mooc-nav-nav ul li.past-page:hover {
+  background-color: #FFFFFF;
+}
+#block-mooc-nav-block-mooc-nav-nav .block-mooc-nav-block-mooc-title {
+  border-bottom: .1rem solid #000000;
+  margin: 0;
+  line-height: 2.5rem;
+  height: 2.5rem;
+  font-size: .8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 0 0 1.25rem;
+}
+
+body.page-node-edit #scrollspy-nav {
+  display: none !important;
+}
+
+#scrollspy-nav .scrollspy-label {
+  display: none;
+  font-weight: bold;
+  padding-top: .5rem !important;
+  margin: -3rem 0 0 0 !important;
+}
+#scrollspy-nav .scrollspy-link {
+  padding: 0 0 0 1em;
+  margin: 0;
+  height: unset;
+}
+
+#scrollspy-nav.pinned .scrollspy-label {
+  display: block;
+  padding: 0;
+}
+#scrollspy-nav.pinned .scrollspy-label a {
+  font-weight: bold;
+  font-size: 1.5rem;
+  padding: 0;
+  margin: 0;
+  height: unset;
+}
+#scrollspy-nav.pinned {
+  left: 0;
+  padding: 0;
+  width: 25%;
+  z-index: 2;
+  min-height: 50vh;
+}
+@media only screen and (max-width: 899px) {
+  #scrollspy-nav.pinned {
+    width: 33.33%;
+  }
+}
+@media only screen and (max-width: 599px) {
+  #scrollspy-nav.pinned {
+    display:none;
+  }
+}
+#block-mooc-nav-block-mooc-nav-nav {
+  border: .1rem solid #000000;
+  border-top: none;
+}
+
+#block-mooc-nav-block-mooc-nav-nav ul{
+  margin: 0;
+  list-style: none;
+}
+
+#block-mooc-nav-block-mooc-nav-nav li {
+  clear: both;
+  padding: .25rem;
+}
+
+#block-mooc-nav-block-mooc-nav-nav li.active-trail {
+  background-color: #212121;
+}
+
+/* structure in media */
+.scrollspy-toc .table-of-contents {
+  max-height: 65vh;
+  min-width: 10rem;
+  overflow-y: scroll;
+  width: calc(50vw - 52%);
+  max-width: 30em;
+  margin: 0;
+}
+/* structure in mooc */
+.scrollspy-toc.table-of-contents {
+  list-style-type: none;
+}
+
+.mooc-nav-block-left {
+  float: left;
+  margin-right: 1rem;
+}
+.mooc-nav-block-right {
+  float: right;
+  margin-left: 1rem;
+}
+
+.page-mooc-book-toc ul.menu {
+  list-style-type: none;
+  margin: 0;
+}
+.page-mooc-book-toc ul.menu paper-button {
+  color: #222222;
+}
+.page-mooc-book-toc ul.menu ul.menu {
+  list-style-type: none;
+  margin: 0 0 0 2rem;
+}
+.page-mooc-book-toc ul.menu ul.menu ul.menu {
+  list-style-type: none;
+  margin: 0 0 0 2rem;
+}
+.page-mooc-book-toc ul.menu ul.menu ul.menu ul.menu {
+  list-style-type: none;
+  margin: 0 0 0 2rem;
+}
+.page-mooc-book-toc ul.menu ul.menu ul.menu ul.menu ul.menu {
+  list-style-type: none;
+  margin: 0 0 0 2rem;
+}
+
+.etb-book .page-mooc-book-toc ul.menu a paper-button {
+  border-radius: unset;
+  padding: 0 0 0 1rem;
+  border-left: 2px solid #222222;
+}
+.page-mooc-book-toc ul.menu lrnsys-button.has-children a paper-button {
+  padding: 0;
+  border-left: 0;
+}
+
+.page-mooc-book-toc ul.menu a paper-button iron-icon {
+  margin: 0 .5rem 0 0;
+}
+
+ul.book-navigation-wrapper {
+  margin: 0;
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
 }
 
 .book-menu-item-active {
-  background-color: #eeeeee;
+  font-weight: bold;
 }
 .book-navigation-header {
   display: -webkit-box;
   display: -webkit-flex;
   display: -ms-flexbox;
   display: flex;
+  z-index: 1;
 }
-.book-sibling-parent-pagination-wrapper {
-  margin-left: auto;
-  margin-right: 3rem;
+
+.book-navigation-header ul {
+  padding: 0;
 }
 
 .book-sibling-nav-container {
-  margin-bottom: 1rem;
-}
-
-.book-sibling-parent-pagination-wrapper {
-  float: right;
+  margin: 0;
+  font-size: 0.8rem;
 }
 
 .book-navigation-footer {
-  margin: 3rem 0;
+  margin: 2em 0;
   clear:both;
 }
 
-.book-navigation-footer .book-sibling-parent-pagination-previous {
-  float: left;
+.book-navigation-footer paper-button {
+  padding: 0 .5em;
 }
 
-.book-navigation-footer .book-sibling-parent-pagination-next {
+.book-sibling-parent-pagination-previous {
+  float: left;
+  word-wrap: break-word;
+}
+.book-sibling-parent-pagination-next {
   float: right;
+  word-wrap: break-word;
 }
 
 .book-sibling-children a {
   line-height: 2rem;
 }
 
+/* Scroll bar for breadcrumb nav that's really really long */
 .book-sibling-nav-container .f-dropdown.content {
-  max-width: 300px;
+  max-width: 20rem;
+  max-height: 20rem;
 }
+/* end scroll bar styling */
 
 .book-sibling-nav-container .f-dropdown.content ul {
   margin: 0;
@@ -55,142 +580,75 @@
   line-height: 1.5rem;
 }
 
-.book-sibling-parent-pagination a {
-  border: 1px solid #eeeeee;
-  border-radius: 3px;
-  line-height: 150%;
-  font-size: 1rem;
-  color: #222222;
-  text-align: center;
-  color: #222222;
-  padding: .4rem 1rem;
+.book-sibling-parent {
+  display: inline-flex;
+  height: 3rem;
+  line-height: 3rem;
 }
 
-.book-sibling-parent-pagination a:hover {
-  border: 1px solid #dddddd;
-  background-color: #eeeeee;
-}
-
-.book-sibling-spacer {
-  color: #222;
-  vertical-align: top;
-  margin-top: 0.5rem;
-  margin-left: .5rem;
-  margin-right: .5rem;
-  display: inline-block;
-}
-
+.book-sibling-children a,
 .book-sibling-parent a {
-  border: 1px solid #eeeeee;
-  border-radius: 3px;
-  line-height: 150%;
-  font-size: .8rem;
-  color: #222222;
-  text-align: center;
-  color: #222222;
-  padding: 0 .5rem;
+  height: 3em;
+  line-height: 3em;
   line-height: inherit;
-  height: 2.2rem;
   display: -webkit-box;
   display: -webkit-flex;
   display: -ms-flexbox;
   display: flex;
-  -webkit-box-align: center;
-  -webkit-align-items: center;
-  -ms-flex-align: center;
-  align-items: center;
 }
 
-.book-sibling-parent a:hover {
-  border: 1px solid #dddddd;
-  background-color: #eeeeee;
+.book-sibling-parent lrnsys-button.elmsln-dropdown-button paper-button {
+  border-bottom: black solid 2px;
+  border-radius: unset;
+  padding: 0 0 0 1em !important;
+}
+lrnsys-dialog.mooc-helper-toc paper-button {
+  border-bottom: black solid 2px;
+  border-radius: unset;
+  padding: 0 1rem 0 0;
+}
+lrnsys-dialog.mooc-helper-toc {
+  height: 2.875rem;
+  line-height: 2.875rem;
+}
+.sticky-wrapper.is-sticky .book-sibling-parent a.elmsln-dropdown-button {
+  border-bottom-color:white;
+}
+
+.book-sibling-parent a.elmsln-dropdown-button paper-button {
+  margin: 0;
+}
+
+.book-sibling-spacer {
+  vertical-align: text-top;
+  font-size: 2rem;
+  height: 3rem;
+  line-height: 3rem;
+  padding: 0 .25rem;
 }
 
 .book-sibling-parent-text {
   max-width: 7rem;
-  display: inline-block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   border: none;
-  text-decoration: none;
-}
-
-a.mooc-helper-toc {
-  margin: -.75rem 1rem;
-  height: 3rem;
-  width: 3rem;
-}
-.mooc-helper-toc-icon{
-  height: 3rem;
-  width: 3rem;
-}
-
-#block-mooc-helper-mooc-helper-toc-nav-modal {
-  margin:5rem auto;
-  width: 80%;
-  height: 80%;
-}
-#block-mooc-helper-mooc-helper-toc-nav-modal a {
-  border: 1px solid #eeeeee;
-  border-radius: 3px;
-  line-height: 150%;
-  font-size: 1rem;
-  color: #222222;
-  text-align: center;
-  color: #222222;
-  padding: 0 .5rem;
-  line-height: inherit;
-  height: 2.2rem;
-  display: -webkit-box;
-  display: -webkit-flex;
-  display: -ms-flexbox;
-  display: flex;
-  -webkit-box-align: center;
-  -webkit-align-items: center;
-  -ms-flex-align: center;
-  align-items: center;
-}
-
-#block-mooc-helper-mooc-helper-toc-nav-modal a:hover {
-  border: 1px solid #dddddd;
-  background-color: #eeeeee;
-}
-#block-mooc-helper-mooc-helper-toc-nav-modal a.active-trail {
-  font-weight: bold;
-  background-color: #eeeeee;
-}
-#block-mooc-helper-mooc-helper-toc-nav-modal a.active-trail.active {
-  background-color: #cccccc;
-}
-#block-mooc-helper-mooc-helper-toc-nav-modal a.has-children {
+  font-size: .8rem;
   font-weight: bold;
 }
-#block-mooc-helper-mooc-helper-toc-nav-modal ul {
-  margin-left: 0;
+
+#outlinemodal ul.menu {
+  padding-left: 0;
 }
-#block-mooc-helper-mooc-helper-toc-nav-modal ul li ul {
-  margin-left: 2rem;
+#outlinemodal ul.menu li ul {
+  padding-left: 2em;
 }
 
-@media all and (min-width: 960px) {
-  .book-sibling-parent-1 a.active .book-sibling-parent-text {
-    max-width: none;
-  }
-}
-.book-sibling-parent-arrow {
-  margin: 0 0rem -.2rem;
-  padding: .8rem;
-  width: 0;
-  height: 0;
-}
 
-.book-sibling-parent-icon {
-  height: 25px;
-  width: 25px;
-  height: 1.6rem;
-  width: 1.6rem;
-  margin-right: .3rem;
+
+.book-parent-tree {
+  line-height: 3rem;
+  padding: 0;
 }
 
 .book-sibling-nav-item,
@@ -202,25 +660,6 @@ a.mooc-helper-toc {
   font-size: 1rem;
 }
 
-.book-sibling-nav-item .outline-nav-icon {
-  opacity: .5;
-  filter: alpha(opacity=50);
-}
-
-.book-sibling-nav-past-page .outline-nav-icon {
-}
-
-.book-sibling-nav-current-page .outline-nav-icon {
-  background-color: #FFCCCC !important;
-  opacity: 1;
-  filter: alpha(opacity=1);
-}
-
-.book-sibling-nav-future-page .outline-nav-icon {
-  opacity: 0.3;
-  filter: alpha(opacity=30);
-}
-
 .etb-book hr.book-parent-container {
   margin: 1rem 0rem 1rem;
 }
@@ -228,63 +667,38 @@ a.mooc-helper-toc {
 .etb-book .content-element-region {
   padding-top: .5rem;
 }
-.left-off-canvas-toggle.menu-icon {
-  display: none;
+
+ul.off-canvas-list {
+  list-style-type: none;
+  margin: 0;
+  padding: 0; }
+  ul.off-canvas-list li label {
+    background: #444444;
+    border-bottom: none;
+    border-top: 1px solid #5e5e5e;
+    color: #999999;
+    display: block;
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin: 0;
+    padding: 0.3rem 0.9375rem;
+    text-transform: uppercase; }
+  ul.off-canvas-list li a {
+    border-bottom: 1px solid #2f2f2f;
+    color: rgba(255, 255, 255, 0.7);
+    display: block;
+    padding: 0.6666666667rem;
+    transition: background 300ms ease; }
+    ul.off-canvas-list li a:hover {
+      background: #242424; }
+    ul.off-canvas-list li a:active {
+      background: #242424; }
+
+section.main-section.etb-book a.elmsln-outline-button {
+    margin-left: 1rem;
 }
 
 @media all and (max-width: 720px) {
-  .magellan-wrap.fixed {
-    top: 0 !important;
-  }
-  .left-off-canvas-toggle.menu-icon {
-    display: block;
-  }
-  .book-navigation-header {
-    -webkit-box-orient: vertical;
-    -webkit-box-direction: normal;
-    -webkit-flex-direction: column;
-        -ms-flex-direction: column;
-            flex-direction: column;
-    display: none;
-  }
-
-  .book-sibling-parent,
-  .book-sibling-parent a {
-    clear: both;
-    width: 100%;
-    max-width: none;
-    text-align: left;
-  }
-
-  .book-sibling-parent a {
-    padding: .5rem 0;
-  }
-
-  .book-navigation-header .book-sibling-parent-pagination {
-    display: none;
-  }
-
-  .book-sibling-spacer {
-    display: none;
-  }
-
-  .book-sibling-parent-icon {
-    float: none;
-    display: inline-block;
-    -webkit-box-ordinal-group: 3;
-    -webkit-order: 2;
-        -ms-flex-order: 2;
-            order: 2;
-  }
-
-  .book-sibling-parent-arrow {
-    -webkit-box-ordinal-group: 2;
-    -webkit-order: 1;
-        -ms-flex-order: 1;
-            order: 1;
-    margin-right: .5rem;
-  }
-
   .book-sibling-parent-text {
     max-width: none;
     -webkit-box-ordinal-group: 3;
@@ -292,46 +706,114 @@ a.mooc-helper-toc {
         -ms-flex-order: 2;
             order: 2;
   }
+  #block-mooc-helper-mooc-helper-toc-nav-modal {
+    font-size: .75rem;
+  }
+  .reveal-modal.etb-nav-modal, .reveal-modal.open.etb-nav-modal {
+    width: 100%;
+    right:0;
+    padding-right: .1rem;
+  }
+  #block-mooc-helper-mooc-helper-toc-nav-modal {
+    margin: 1.25rem auto;
+    width: 95%;
+    height: 95%
+  }
+  #block-mooc-helper-mooc-helper-toc-nav-modal ul {
+    margin-left: 0rem;
+  }
+  #block-mooc-helper-mooc-helper-toc-nav-modal ul li ul {
+    margin-left: 1rem;
+  }
+  #block-mooc-helper-mooc-helper-toc-nav-modal ul li {
+    min-width: 400px;
+    list-style: none !important;
+  }
+  #block-mooc-helper-mooc-helper-toc-nav-modal a {
+    height: inherit;
+  }
+  #block-mooc-helper-mooc-helper-toc-nav-modal a.close-reveal-modal {
+    height: 1rem;
+  }
+  .reveal-modal {
+    padding: .1rem;
+  }
 }
+
 @media all and (min-width: 720px) {
-  .book-sibling-parent-1 a.active {
-    border-color: transparent;
-    padding-left: 0;
-    color: #008CBA;
+
+  .book-sibling-parent-1 a.active-trail .book-sibling-parent-text {
+    color: #eceff1;
   }
 
-  .book-sibling-parent-1 a.active:hover {
-    border-color: transparent;
+  .book-sibling-parent-1 a.active-trail:hover {
     background: transparent;
   }
+  .elmsln-dropdown-button.book-parent-tree paper-button{
+  	padding: 0;
+  	text-overflow: ellipsis;
+  	word-wrap: break-word;
+  }
+  .book-sibling-parent-1 .elmsln-dropdown-button,
   .book-sibling-parent-1 .book-sibling-parent-text {
+    max-width:12rem;
+  }
+  .book-sibling-parent-2 .elmsln-dropdown-button,
+  .book-sibling-parent-2 .book-sibling-parent-text {
     max-width:10rem;
   }
-  .book-sibling-parent-2 .book-sibling-parent-text {
+  .book-sibling-parent-3 .elmsln-dropdown-button,
+  .book-sibling-parent-3 .book-sibling-parent-text {
     max-width:8rem;
   }
-  .book-sibling-parent-3 .book-sibling-parent-text {
+  .book-sibling-parent-4 .elmsln-dropdown-button,
+  .book-sibling-parent-4 .book-sibling-parent-text {
     max-width:6rem;
   }
-  .book-sibling-parent-4 .book-sibling-parent-text {
+  .book-sibling-parent-5 .elmsln-dropdown-button,
+  .book-sibling-parent-5 .book-sibling-parent-text {
     max-width:4rem;
   }
-  .book-sibling-parent-5 .book-sibling-parent-text {
+  .book-sibling-parent-6 .elmsln-dropdown-button,
+  .book-sibling-parent-6 .book-sibling-parent-text {
     max-width:2rem;
   }
-  .book-sibling-parent-5 .book-sibling-parent-text {
-    max-width:1.5rem;
-  }
-  .book-sibling-parent-6 .book-sibling-parent-text {
-    max-width:1.5rem;
-  }
+  .book-sibling-parent-7 .elmsln-dropdown-button,
   .book-sibling-parent-7 .book-sibling-parent-text {
     max-width:1rem;
   }
+  .book-sibling-parent-8 .elmsln-dropdown-button,
   .book-sibling-parent-8 .book-sibling-parent-text {
     max-width:1rem;
   }
+  .book-sibling-parent-9 .elmsln-dropdown-button,
   .book-sibling-parent-9 .book-sibling-parent-text {
     max-width:1rem;
   }
+}
+
+/**
+ * Ensure that menu inner padding isn't applied
+ */
+.highlighted-block-area .lrnsys-button-0 paper-button.lrnsys-button div.inner.lrnsys-button {
+  padding: 0;
+}
+
+.highlighted-block-area {
+  position: absolute;
+  right: auto;
+  width: 17%;
+  margin: 0;
+  left: 0;
+  top: 3em;
+  max-width: unset;
+  min-width: unset;
+}
+
+/**
+ * Ensure that iframes are fitting into the content area and not
+ * spilling over.
+ */
+lrn-page iframe {
+  width: 100%;
 }

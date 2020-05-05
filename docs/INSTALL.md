@@ -1,18 +1,23 @@
 #ELMSLN - Installation Guide
 
+## Minimum Requirements
+You will need at least a stand-alone server with 2 gigs of RAM.
+
 ## Hands free install
-There are some handsfree install routines (copy and paste) that you can try. This is the preferred method of installing ELMS Learning Network as it'll get you up and running with the least steps possible.
+There are many handsfree install routines (copy and paste) that you can try. This is the preferred method of installing ELMS Learning Network as it'll get you up and running with the least steps possible. You can watch @bradallenfisher [install via this method on ELMSLN](https://drupal.psu.edu/blog/post/elmsln-aws-ec2).
 
-### CentOS 6.x / RHEL 6.x
-https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/centos/example-deploy
-### AWS managed image
-https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/amazon/example-deploy
-### CentOS 7.x
-https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/centos7/example-deploy
-### Ubuntu 14.x / Debian 8.x
-https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/ubuntu/example-deploy
+[This one-line builder](https://rawgit.com/elmsln/install-builder/master/install.html) can help you generate a one-line command to copy and paste.
 
-Hands free has some arguments passed into it to get going but these are for installation against a fresh copy of a server.
+### CentOS 7.x / RHEL 7.x
+[Example Deployment](https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/centos7/example-deploy)
+### AWS EC2 AMI
+[Example Deployment](https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/amazon/example-deploy)
+### Ubuntu 16.x
+[Example Deployment](https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/ubuntu16/example-deploy)
+
+Hands free has some arguments passed into it to get going but these are for installation against a fresh copy of a server. If you install with the default options provided in those (with addresses of elmsln.dev) you'll want to make sure you modify your local `/etc/hosts` file to reflect these fake addresses.
+
+See the [Vagrant installation documentation](https://elmsln.readthedocs.io/en/latest/development/Vagrant-Step-by-Step-setup/) on how to do this though in the installer you'll see a big ELMSLN ascii art message that should tell you what to place there based on your server.
 
 ## Manual but mostly automated installation
 copy and paste the following offset command prompt items
@@ -57,17 +62,8 @@ For most production use cases it is recommended that you use LDAP, Shibboleth, C
 # EXTRAS (optional)
 
 ## PIWIK
-Install the analytics package by pointing a domain to the
-elmsln/domains/analytics.  This is running piwik and has config and tmp files
-modified to point to the symlink directories in the config directory.
-
-Create a database named analytics_{host} to match the rest of your systems.
-You'll need to create a user / password and then  run through the installation
-at analytics.{domain}. There are examples in the cis_example modules included
-with this package as to how that might look.
-
-elmsln-config-vagrant also includes a working analytics example to see how
-a feature might be created to help make hooking in new systems easier.
+https://piwik.org/download/
+We love Piwik. It's a great open source user analytics tool that can help you track and aid students with technical support issues as well as gain insight into how they are accessing your content. ELMS:LN has native support via the piwik module included with Drupal. It is recommended to install on its own server.
 
 ## MCRYPT
 You might need / want mcrypt if you are going to use file system encryption. All handsfree installers include this automatically.
@@ -77,9 +73,20 @@ Go here: https://mirrors.fedoraproject.org/publiclist/EPEL/6/x86_64/#US find a m
 This example is 64 bit RHEL 6 building the rpm
 ```
 wget http://ftp.linux.ncsu.edu/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
-rpm -Uvh epel-release-6-8.noarch.rpm
+rpm -Uvh epel-release-6-8.noar- Installation: INSTALL.mdch.rpm
 # install it
 yum -y install php-mcrypt
 ```
+
+## ChromeOS / ChromeBit / IoT
+If you want to install ELMS:LN on a google Chromebit it is possible given it has 2 gigs of RAM (our minimum requirements). This is not supported but these are the steps to do it from testing:
+- `http://www.howtogeek.com/162120/how-to-install-ubuntu-linux-on-your-chromebook-with-crouton/`
+- at the end instead of launching X-windows run `sudo enter-chroot` which will boot into the device
+- `sudo -i` to switch to root
+- install as if this was Ubuntu 12, because it is. `https://github.com/elmsln/elmsln/blob/master/scripts/install/handsfree/ubuntu12/example-deploy`
+
+Not working currently as it doesn't install mysql for some reason correctly
+
+
 
 *Ex Uno Plures*

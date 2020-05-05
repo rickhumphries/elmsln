@@ -22,9 +22,16 @@ elmslnwarn(){
 
 # prompt the user
 prompt="Leafy: Type the number for what you'd like to do today: "
-items=("oops, didn't want to be here" 'show me the sites drush knows about' 'upgrade the ELMSLN code base and system' 'upgrade just the drupal sites' 'backup the drupal databases.' 'backup the configuration directory.' 'clean up directory and file permissions issues.' 'refresh the drush plugins my user has' 'setup (or refresh) the recommended elmsln configuration for my user account' 'remove a drupal site from ELMSLN (can not be undone)')
-locations=('' '' 'upgrade/elmsln-upgrade-system.sh' 'upgrade/elmsln-upgrade-sites.sh' '' 'utilities/backup-config.sh' 'utilities/harden-security.sh' 'utilities/refresh-drush-config.sh' 'install/users/elmsln-admin-user.sh' 'drush-create-site/rm-site.sh')
-commands=('' 'drush sa' 'bash' 'bash' 'drush @elmsln sql-dump --result-file --y' 'sudo bash' 'sudo bash' 'bash' 'bash' 'sudo bash')
+items=("oops, didn't want to be here" 'show me the sites drush knows about' 'upgrade the ELMSLN code base and system' 'upgrade just the drupal sites' 'backup the drupal databases.' 'backup the configuration directory.' 'clean up directory and file permissions issues.' 'refresh the drush plugins my user has' 'setup (or refresh) the recommended elmsln configuration for my user account' 'apply server level upgrades (can not be undone)' 'add domain support (can not be undone)' 'remove a drupal site from ELMSLN (can not be undone)' 'restart apache, mysql and php (can not be undone)' 'cycle service account connection passwords' 'Remove the drush-create-site lock file')
+locations=('' '' 'upgrade/elmsln-upgrade-system.sh' 'upgrade/elmsln-upgrade-sites.sh' '' 'utilities/backup-config.sh' 'utilities/harden-security.sh' 'utilities/refresh-drush-config.sh' 'install/users/elmsln-admin-user.sh' 'upgrade/elmsln-bash-upgrades.sh' 'utilities/add-domain-support.sh' 'drush-create-site/rm-site.sh' 'utilities/restart-elmsln.sh' 'utilities/cycle-service-account-keys.sh' '')
+commands=('' 'drush sa' 'bash' 'bash' 'drush @elmsln sql-dump --result-file --y' 'sudo bash' 'sudo bash' 'bash' 'bash' 'sudo bash' 'sudo bash' 'sudo bash' 'sudo bash' 'bash' 'sudo rm /tmp/drush-lock')
+# allow for dropping into developer mode if a flag isset
+if [[ ! -z $1 && $1 == 'dev' ]]; then
+  elmslnecho 'DEVELOPER MODE'
+  items+=('Create new tool' 'Pull a system over top of this one')
+  locations+=('developer/create-new-tool.sh' 'utilities/migration/pull-down.sh')
+  commands+=('bash' 'sudo bash')
+fi
 
 # render the menu options
 menuitems() {
@@ -35,10 +42,23 @@ menuitems() {
   [[ "$msg" ]] && echo "" && echo "$msg"; :
 }
 version=$(cat "$elmsln/VERSION.txt")
+config_version=$(cat "$elmsln/config/SYSTEM_VERSION.txt")
 courses=$(drush @online efq node course --count)
+seviceinstance=$(drush @online efq node service_instance --count)
 sections=$(drush @online efq field_collection_item field_sections --count)
+# get the latest version
+touch "$elmsln/config/tmp/LATEST.txt"
+wget -O- "https://raw.githubusercontent.com/elmsln/elmsln/master/VERSION.txt" > "$elmsln/config/tmp/LATEST.txt"
+latestversion=$(cat "$elmsln/config/tmp/LATEST.txt")
+if [[ $latestversion != $version ]]; then
+  elmslnwarn "An upgrade to elmsln (${latestversion}) is available! Use the options below to upgrade the code or type: cd /var/www/elmsln && git pull origin master"
+fi
+if [[ $config_version != $version ]]; then
+  elmslnwarn "Config version different from code version! It is recommended that you select apply server level upgrades from the below list."
+fi
 elmslnecho "ELMSLN VERSION: $version"
 elmslnecho "Courses in CIS: $courses"
+elmslnecho "Service instances in CIS: $seviceinstance"
 elmslnecho "Sections in CIS: $sections"
 
 # make sure we get a valid response before doing anything

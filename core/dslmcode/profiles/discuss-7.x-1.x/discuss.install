@@ -15,6 +15,59 @@ function discuss_install() {
   _elmsln_installer_admin_role();
   // standard clean up
   _elmsln_installer_post_install_cleanup();
+  // rebuild harmoney access records
+  harmony_access_rebuild();
   // front-page for discuss is the forum path
   variable_set('site_frontpage', 'forum');
+}
+
+/**
+ * Enable discuss helper module and rebuild access permissions.
+ */
+function discuss_update_7001(&$sandbox) {
+  module_enable(array('discuss_helper'));
+  node_access_rebuild();
+  harmony_access_rebuild();
+}
+
+/**
+ * Update the OG fields in harmony so we can start having discussions
+ * locked down per group or postings that only appear per group.
+ */
+function discuss_update_7002(&$sandbox) {
+  // there's a window where this didn't get enabled potentially
+  module_enable(array('discuss_helper'));
+  features_revert_module('discuss_harmony_fields');
+  node_access_rebuild();
+  harmony_access_rebuild();
+}
+
+/**
+ * Enable the service module so we can do things specific
+ * to services in the future.
+ */
+function discuss_update_7003(&$sandbox) {
+  module_enable(array('cis_course_service'));
+}
+
+/**
+ * Add thread link.
+ */
+function discuss_update_7004(&$sandbox) {
+  features_revert_module('discuss_ux');
+}
+
+/**
+ * xAPI tracking for view / duration stuff at least
+ */
+function discuss_update_7005(&$sandbox) {
+  module_enable(array('elmsln_lrs'));
+}
+
+/**
+ * Revert to get these up to latest.
+ */
+function discuss_update_7006(&$sandbox) {
+  features_revert_module('harmony_atjs');
+  features_revert_module('harmony_core');
 }

@@ -29,18 +29,27 @@
  */
 ?>
 <?php if ($has_links): ?>
-  <div id="book-navigation-<?php print $book_id; ?>" class="book-navigation-footer small-12 medium-12 large-12 book-sibling-nav-container">
+  <div id="book-navigation-<?php print $book_id; ?>" class="book-navigation-footer row book-sibling-nav-container">
     <?php if ($has_links): ?>
+      <div class="col s6">
       <?php if ($prev_url): ?>
-        <li class="toolbar-menu-icon book-sibling-parent-pagination book-sibling-parent-pagination-previous">
-          <a href="<?php print $prev_url; ?>" class="page-previous" title="<?php print t('Go to previous page'); ?>"><?php print t('<'); ?></a>
-        </li>
+        <lrnsys-button href="<?php print $prev_url; ?>" class="book-sibling-parent-pagination-previous page-previous black-text white" title="<?php print t('Go to previous page'); ?>" data-voicecommand="previous" data-jwerty-key="←" hover-class="grey darken-3 white-text" raised icon="image:navigate-before">
+          <span><?php print t('Previous page'); ?></span>
+        </lrnsys-button>
       <?php endif; ?>
-      <?php if ($next_url): ?>
-        <li class="toolbar-menu-icon book-sibling-parent-pagination book-sibling-parent-pagination-next">
-          <a href="<?php print $next_url; ?>" class="page-next" title="<?php print t('Go to next page'); ?>"><?php print t('>'); ?></a>
-        </li>
+      </div>
+      <div class="col s5">
+      <?php if (!$prev_url && $next_url): ?>
+        <lrnsys-button href="<?php print $next_url; ?>" icon="arrow-forward" data-prefetch-scrollfire="true" class="page-next book-sibling-parent-pagination-next black-text white" title="<?php print t('Start reading'); ?>" data-voicecommand="start" data-jwerty-key="→" hover-class="grey darken-3 white-text" raised>
+          <span slot="prefix"><?php print t('Start reading'); ?></span>
+        </lrnsys-button>
       <?php endif; ?>
+      <?php if ($prev_url && $next_url): ?>
+        <lrnsys-button href="<?php print $next_url; ?>" icon="image:navigate-next" data-prefetch-scrollfire="true" class="page-next book-sibling-parent-pagination-next black-text white" title="<?php print t('Go to next page'); ?>" data-voicecommand="next" data-jwerty-key="→" hover-class="grey darken-3 white-text" raised>
+          <span slot="prefix"><?php print t('Next page'); ?></span>
+        </lrnsys-button>
+      <?php endif; ?>
+      </div>
     <?php endif; ?>
   </div>
 <?php endif; ?>

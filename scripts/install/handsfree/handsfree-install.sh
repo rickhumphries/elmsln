@@ -17,7 +17,6 @@ elmslnwarn(){
   echo "${bldred}$1${txtreset}"
 }
 
-mysql_install_db
 # used for random password generation
 COUNTER=0
 char=(0 1 2 3 4 5 6 7 8 9 a b c d e f g h i j k l m n o p q r s t u v w x y z A B C D E F G H I J K L M N O P Q R S T U V X W Y Z)
@@ -30,18 +29,15 @@ do
   pass="${pass}${char[$rand]}"
 done
 # make mysql secure so no one knows the password except this script
-cat <<EOF | mysql_secure_installation
-
-Y
-$pass
-$pass
-Y
-Y
-Y
-Y
-EOF
-elmslnwarn "You'll never see this again so if you care.."
-elmslnwarn "mysql root: $pass"
+mysql -e "UPDATE mysql.user SET Password = PASSWORD('$pass') WHERE User = 'root'"
+# Kill the anonymous users
+mysql -e "DROP USER ''@'localhost'"
+# Because our hostname varies we'll use some Bash magic here.
+mysql -e "DROP USER ''@'$(hostname)'"
+# Kill off the demo database
+mysql -e "DROP DATABASE test"
+# Make our changes take effect
+mysql -e "FLUSH PRIVILEGES"
 # generate a password for the elmslndbo account
 dbopass=''
 for i in `seq 1 30`
@@ -85,8 +81,6 @@ source .bashrc
 chown -R root:root /var/www/elmsln
 # setup user as admin
 bash /var/www/elmsln/scripts/install/users/elmsln-admin-user.sh
-# install system and off we go
-bash /var/www/elmsln/scripts/install/elmsln-install.sh
 
 # give them a roadmap for mapping to this until proving a real domain
 cd /var/www/elmsln/core/dslmcode/stacks
@@ -95,6 +89,38 @@ domain=$5
 datadomain=$6
 prefix=$7
 ip=$(hostname -I)
+# if this is our default dev box domain name then kick this into the hosts file
+# so that it works when they do it on their own machine
+if [[ $domain = 'elmsln.dev' ||  $domain = 'elmsln.local' ]]; then
+  elmslnwarn "ELMSLN Development settings detected, we will author your server's /etc/hosts file for you"
+  echo "# ELMSLN development" >> /etc/hosts
+  for stack in "${stacklist[@]}"
+  do
+    echo "${ip}  ${stack}.${domain}" >> /etc/hosts
+  done
+  echo "" >> /etc/hosts
+  # loop again on webservices domains
+  for stack in "${stacklist[@]}"
+  do
+    echo "${ip}  ${prefix}${stack}.${datadomain}" >> /etc/hosts
+  done
+fi
+  # systems restart differently
+  if [[ $1 == '1' ]]; then
+    /etc/init.d/httpd restart
+    /etc/init.d/php-fpm restart
+    /etc/init.d/mysqld restart
+  elif [ $1 == '2' ]; then
+    service apache2 restart
+    service php5-fpm restart
+    service php7.0-fpm restart
+  else
+    service httpd restart
+    service mysqld restart
+    service php-fpm restart
+  fi
+# install system and off we go
+bash /var/www/elmsln/scripts/install/elmsln-install.sh
 elmslnecho "If you are developing with this and don't have a valid domain yet you can copy the following into your local machine's /etc/hosts file:"
 elmslnecho "# ELMSLN development"
 # loop through and write each of these here

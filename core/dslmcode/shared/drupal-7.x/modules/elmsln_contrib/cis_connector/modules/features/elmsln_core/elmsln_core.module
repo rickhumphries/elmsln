@@ -1,0 +1,2833 @@
+<?php
+/**
+ * @file
+ * Code for the ELMSLN Core feature.
+ */
+
+define ('ELMSLN_CORE_LRS_KEYCHAIN', '_lrs');
+define ('ELMSLN_CORE_PIWIK_KEYCHAIN', '_piwik');
+define ('ELMSLN_XAPI_DEFAULT_ICON', 'storage');
+define ('ELMSLN_XAPI_DEFAULT_COLOR', 'red');
+
+include_once 'elmsln_core.features.inc';
+
+// elmsln file stream wrapper
+include_once 'includes/elmsln_stream_wrappers.inc';
+
+/**
+ * Implements hook_stream_wrappers().
+ */
+function elmsln_core_stream_wrappers() {
+  return array(
+    'elmslnauthority' => array(
+      'name' => t('ELMSLN authority files'),
+      'class' => 'ELMSLNAuthorityStreamWrapper',
+      'description' => t('ELMSLN Authority file delivery wrapper that uses the application pattern to find files.'),
+    ),
+    'elmslnservice' => array(
+      'name' => t('ELMSLN service files'),
+      'class' => 'ELMSLNServiceStreamWrapper',
+      'description' => t('ELMSLN Service file delivery wrapper that uses the application pattern to find files.'),
+    ),
+  );
+}
+
+/**
+ * Fallback for drupal_realpath() because it doesn't like us currently.
+ */
+function _elmsln_core_realpath($uri) {
+  // convert target into array
+  $fileparts =  explode('/', str_replace('\\', '/', $uri));
+  array_shift($fileparts);
+  array_shift($fileparts);
+  // shift front off into tool name
+  $tool = array_shift($fileparts);
+  // convert back to file you are looking for
+  $filepath = implode('/', $fileparts);
+  // build full path to return
+  $cfg = _elmsln_core_get_cfg();
+  if ($settings = _cis_connector_build_registry($tool)) {
+    $adr = explode('.', $settings['address']);
+    $domain = array_shift($adr);
+  }
+  return $cfg['configsdir'] . '/stacks/' . $domain . '/sites/' . $domain . '/' . $cfg['host'] . '/files/' . $filepath;
+}
+
+/**
+ * Pull config from the filesystem global value
+ * @return array config from the filesystem
+ */
+function _elmsln_core_get_cfg() {
+  return $GLOBALS['elmslncfg'];
+}
+
+/**
+ * Implements hook_menu().
+ */
+function elmsln_core_menu() {
+  $items['elmsln/course-data'] = array(
+    'title' => 'Course data',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('elmsln_core_data_form'),
+    'access arguments' => array('view elmsln lrs data'),
+    'weight' => 10,
+    'type' => MENU_NORMAL_ITEM,
+    'menu_name' => 'menu-elmsln-settings',
+    'file' => 'elmsln_core.pages.inc',
+  );
+  $items['elmsln/error/%'] = array(
+    'title' => '',
+    'title callback' => '_elmsln_core_error_title',
+    'title arguments' => array(2),
+    'page callback' => '_elmsln_core_error_page',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+    'weight' => 10,
+    'type' => MENU_CALLBACK,
+    'file' => 'elmsln_core.errors.inc',
+  );
+  $items['node/%node/data'] = array(
+    'title' => 'Related data',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('elmsln_core_data_form'),
+    'access callback' => '_elmsln_core_data_access',
+    'access arguments' => array('node', 1),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+    'file' => 'elmsln_core.pages.inc',
+  );
+  $items['user/%user/data'] = array(
+    'title' => 'Related data',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('elmsln_core_data_form'),
+    'access callback' => '_elmsln_core_data_access',
+    'access arguments' => array('user', 1),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+    'file' => 'elmsln_core.pages.inc',
+  );
+  $items['elmsln/redirect/%/%'] = array(
+    'title' => 'view',
+    'page callback' => '_elmsln_core_remote_redirect',
+    'access arguments' => array('view cis shortcode'),
+    'page arguments' => array(2, 3, '', 'view'),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+  $items['elmsln/redirect/%/%/%'] = array(
+    'title' => 'view',
+    'page callback' => '_elmsln_core_remote_redirect',
+    'access arguments' => array('view cis shortcode'),
+    'page arguments' => array(2, 3, 4, 5),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+  $items['elmsln/redirect/%/%/%/edit'] = array(
+    'title' => 'edit',
+    'page callback' => '_elmsln_core_remote_redirect',
+    'page arguments' => array(2, 3, 4, 5),
+    'access arguments' => array('view cis shortcode'),
+    'weight' => 0,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+  $items['elmsln/redirect/%/%/%/view_modes'] = array(
+    'title' => 'display options',
+    'page callback' => '_elmsln_core_remote_redirect',
+    'access arguments' => array('view cis shortcode'),
+    'page arguments' => array(2, 3, 4, 5),
+    'weight' => 1,
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+  $items['elmsln/redirect/%/%/%/data'] = array(
+    'title' => 'related data',
+    'page callback' => '_elmsln_core_remote_redirect',
+    'page arguments' => array(2, 3, 4, 5),
+    'access arguments' => array('view cis shortcode'),
+    'weight' => 2,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+  $items['admin/config/system/service-settings'] = array(
+    'title' => 'Course settings',
+    'description' => 'Change system settings for this service.',
+    'type' => MENU_NORMAL_ITEM,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('elmsln_core_service_settings_form'),
+    'access callback' => '_cis_connector_role_groupings',
+    'access arguments' => array(array('teacher', 'staff')),
+  );
+  $items['elmsmedia-file-save/%'] = array(
+    'page callback' => '_elmsmedia_file_save',
+    'page arguments' => array(1),
+    'type' => MENU_CALLBACK,
+    'access callback' => '_hax_file_access',
+    'access arguments' => array('create'),
+  );
+
+  $items['elmsln/course-settings'] = array(
+    'title' => 'Settings',
+    'description' => 'Change settings for this service.',
+    'type' => MENU_NORMAL_ITEM,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('elmsln_core_service_settings_form'),
+    'access callback' => '_cis_connector_role_groupings',
+    'access arguments' => array(array('teacher', 'staff')),
+    'menu_name' => 'menu-elmsln-settings',
+    'weight' => -10,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_elmsln_core_json_schema_forms_alter().
+ */
+function elmsln_core_json_schema_forms_alter(&$schema) {
+  foreach ($schema['properties'] as $key => $value) {
+    if ($value['type'] == 'jquery_colorpicker') {
+      $schema['properties'][$key]['type'] = 'string';
+      $schema['properties'][$key]['component'] = array(
+        'name' => 'paper-swatch-picker',
+        'valueProperty' => 'color',
+      );
+    }
+  }
+}
+
+/**
+ * Page callback for elmsln_core_service_settings.
+ */
+function elmsln_core_service_settings_form($form, $form_state) {
+  $form = array();
+  $form['site_information_name'] = array(
+    '#tree' => '0',
+    '#type' => 'fieldset',
+    '#collapsed' => '1',
+    '#collapsible' => '1',
+    '#title' => t('Course Name'),
+    '#description' => t('Course name and title displayed in the top right.'),
+    '#weight' => '-2',
+  );
+  $form['site_information_links'] = array(
+    '#tree' => '0',
+    '#type' => 'fieldset',
+    '#collapsed' => '1',
+    '#collapsible' => '1',
+    '#title' => t('Links'),
+    '#weight' => '-1',
+  );
+  $form['site_information'] = array(
+    '#tree' => '0',
+    '#type' => 'fieldset',
+    '#collapsed' => '1',
+    '#collapsible' => '1',
+    '#title' => t('Tool details'),
+    '#weight' => '0',
+  );
+  $form['site_information_name']['site_name'] = array(
+    '#description' => t('A short name for the Course'),
+    '#default_value' => variable_get('site_name', ''),
+    '#weight' => '0',
+    '#title' => t('Name'),
+    '#type' => 'textfield',
+    '#required' => '1',
+  );
+  $form['site_information_name']['site_slogan'] = array(
+    '#default_value' => variable_get('site_slogan', ''),
+    '#weight' => '1',
+    '#description' => t('Title of the course'),
+    '#type' => 'textfield',
+    '#title' => t('Title'),
+    '#required' => '1',
+  );
+  // links
+  $form['site_information_links']['site_frontpage'] = array(
+    '#default_value' => variable_get('site_frontpage', 'node'),
+    '#weight' => '2',
+    '#description' => t('Home page for this site'),
+    '#type' => 'textfield',
+    '#title' => t('Front page'),
+    '#required' => '1',
+  );
+  $form['site_information_links']['cis_help_page'] = array(
+    '#default_value' => variable_get('cis_help_page', 'course-help'),
+    '#weight' => '3',
+    '#description' => t('Where the help button points. Leave blank to hide the button'),
+    '#type' => 'textfield',
+    '#title' => t('Help button'),
+  );
+  $form['site_information_links']['cis_resource_page'] = array(
+    '#default_value' => variable_get('cis_resource_page', 'resources'),
+    '#weight' => '3',
+    '#description' => t('Where the resources button points. Leave blank to hide the button'),
+    '#type' => 'textfield',
+    '#title' => t('Resources button'),
+  );
+  $form['site_information_links']['cis_syllabus_page'] = array(
+    '#default_value' => variable_get('cis_syllabus_page', 'syllabus'),
+    '#weight' => '4',
+    '#description' => t('Where the syllabus link points. Leave blank to hide the button'),
+    '#type' => 'textfield',
+    '#title' => t('Syllabus button'),
+  );
+  // allow service specific settings to be mixed in
+  $options = _elmsln_core_get_service_settings();
+  $form['site_information'] += $options;
+  // load up the system theme admin form to modify it here
+  module_load_include('inc', 'system', 'system.admin');
+  $tmp = drupal_get_form('system_theme_settings', variable_get('theme_default', 'foundation_access'));
+  // see if we have foundation access settings we can dump in here too
+  if (isset($tmp['zurb_foundation']['foundation_access'])) {
+    // format and append the collapse
+    $tmp['zurb_foundation']['foundation_access']['#collapsible'] = TRUE;
+    $form['theme'] = $tmp['zurb_foundation']['foundation_access'];
+    $form['theme']['#title'] = t('Theme / Style settings');
+    $form['theme']['#collapsed'] = '1';
+    $form['var'] = array(
+      '#type' => 'hidden',
+      '#value' => 'theme_' . variable_get('theme_default', 'foundation_access') . '_settings',
+    );
+    // unset some of the standard theme settings
+    foreach ($form['theme'] as &$value) {
+      if (is_array($value) && isset($value['#value'])) {
+        unset($value['#value']);
+      }
+    }
+    // submit handlers
+    $form['#submit'][] = 'system_theme_settings_submit';
+    $form['#submit'][] = 'elmsln_core_service_settings_form_submit';
+  }
+  return system_settings_form($form);
+}
+
+/**
+ * Return the settings specific to this service
+ * @return array  whatever the service says its settings are.
+ */
+function _elmsln_core_get_service_settings($section = NULL) {
+  $settings = module_invoke_all('elmsln_core_service_settings', $section);
+  drupal_alter('elmsln_core_service_settings', $settings, $section);
+  return $settings;
+}
+
+/**
+ * Callback for the settings form.
+ */
+function elmsln_core_service_settings_form_submit($form, &$form_state) {
+  module_load_include('inc', 'system', 'system.admin');
+  // Exclude unnecessary elements before saving.
+  form_state_values_clean($form_state);
+  // ensure that course name is changed globally if updated anywhere
+  $properties = array();
+  if (variable_get('site_name', '') != $form_state['values']['site_name']) {
+    $properties['title'] = $form_state['values']['site_name'];
+  }
+  if (variable_get('site_slogan', '') != $form_state['values']['site_slogan']) {
+    $properties['slogan'] = $form_state['values']['site_slogan'];
+  }
+  // if anything changed let's ship this off everywhere
+  if (!empty($properties)) {
+    _elmsln_api_course_sync($properties, '1', TRUE);
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function elmsln_core_block_info() {
+  $blocks = array(
+    'elmsln_core_user_xapi_data' => array(
+      'info' => t('User xAPI Data'),
+      'cache' => DRUPAL_NO_CACHE,
+    ),
+    'elmsln_navigation_l1' => array(
+      'info' => t('ELMSLN nav level 1'),
+      'cache' => DRUPAL_CACHE_PER_ROLE,
+    ),
+    'elmsln_navigation_l2' => array(
+      'info' => t('ELMSLN nav level 2'),
+      'cache' => DRUPAL_CACHE_PER_ROLE,
+    ),
+    'elmsln_navigation_l3' => array(
+      'info' => t('ELMSLN nav level 3'),
+      'cache' => DRUPAL_CACHE_PER_ROLE,
+    ),
+  );
+  return $blocks;
+}
+
+/**
+ * Fork of menu_tree_all_data which allows for passing in min value
+ * @see  menu_tree_some_data()
+ */
+function menu_tree_some_data($menu_name, $link = NULL, $min_depth = NULL, $max_depth = NULL) {
+  $tree = &drupal_static(__FUNCTION__, array());
+
+  // Use $mlid as a flag for whether the data being loaded is for the whole tree.
+  $mlid = isset($link['mlid']) ? $link['mlid'] : 0;
+  // Generate a cache ID (cid) specific for this $menu_name, $link, $language, max depth, min depth.
+  $cid = 'links:' . $menu_name . ':all:' . $mlid . ':' . $GLOBALS['language']->language . ':' . (int) $max_depth . ':' . (int) $min_depth;
+
+  if (!isset($tree[$cid])) {
+    // If the static variable doesn't have the data, check {cache_menu}.
+    $cache = cache_get($cid, 'cache_menu');
+    if ($cache && isset($cache->data)) {
+      // If the cache entry exists, it contains the parameters for
+      // menu_build_tree().
+      $tree_parameters = $cache->data;
+    }
+    // If the tree data was not in the cache, build $tree_parameters.
+    if (!isset($tree_parameters)) {
+      $tree_parameters = array(
+        'min_depth' => $min_depth,
+        'max_depth' => $max_depth,
+      );
+      if ($mlid) {
+        // The tree is for a single item, so we need to match the values in its
+        // p columns and 0 (the top level) with the plid values of other links.
+        $parents = array(0);
+        for ($i = 1; $i < MENU_MAX_DEPTH; $i++) {
+          if (!empty($link["p$i"])) {
+            $parents[] = $link["p$i"];
+          }
+        }
+        $tree_parameters['expanded'] = $parents;
+        $tree_parameters['active_trail'] = $parents;
+        $tree_parameters['active_trail'][] = $mlid;
+      }
+
+      // Cache the tree building parameters using the page-specific cid.
+      cache_set($cid, $tree_parameters, 'cache_menu');
+    }
+
+    // Build the tree using the parameters; the resulting tree will be cached
+    // by _menu_build_tree()).
+    $tree[$cid] = menu_build_tree($menu_name, $tree_parameters);
+  }
+
+  return $tree[$cid];
+}
+
+/**
+ * Implements hook_init()
+ */
+function elmsln_core_init() {
+  // see if we're getting basic authorization headers
+  // if not then see if we can pull them out of the address itself
+  // example taken from restws_basic_authorization but should work for
+  // all forms of basic authorization to allow it to play nice with
+  // front end users tapping into the SSO
+  if (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) && !isset($_SERVER['PHP_AUTH_USER']) && !isset($_SERVER['PHP_AUTH_PW'])) {
+    $authentication = base64_decode(substr($_SERVER['REDIRECT_HTTP_AUTHORIZATION'], 6));
+    list($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW']) = explode(':', $authentication);
+  }
+  // if we see an account attemping basic authorization try and match it
+  // to those webservice user accounts in the cis_connector registry
+  if (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
+    // try and pull install profile direct from the database
+    $distro = elmsln_core_get_profile_key();
+    $settings = _cis_connector_build_registry($distro);
+    // if the username and password match we're golden
+    if (isset($settings['user']) && isset($settings['pass']) && $_SERVER['PHP_AUTH_USER'] == $settings['user'] && $_SERVER['PHP_AUTH_PW'] == $settings['pass']) {
+      global $user;
+      $user = user_load_by_name($settings['user']);
+    }
+  }
+  // Allow CORS OPTIONS request method to instantly return just the HTTP headers.
+  // https://www.drupal.org/node/1084144
+  if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    drupal_exit();
+  }
+  // support for login spoofing if this is a restful webservice user
+  // this still requires that account have the right permissions to access anything
+  // of value
+  if (isset($_GET['render-as']) && in_array('SERVICE ACCOUNT', $GLOBALS['user']->roles)) {
+    global $user;
+    global $_restws_bypass_user;
+    $tmp = $user;
+    $name = filter_xss($_GET['render-as']);
+    // try and load a "render-as" name
+    if($user = user_load_by_name($name)) {
+      $_restws_bypass_user = $tmp;
+    }
+    else {
+      $user = $tmp;
+    }
+  }
+}
+
+/**
+ * Implements hook_exit().
+ */
+function elmsln_core_exit($destination = NULL) {
+  global $_restws_bypass_user;
+  // set the user back to who they were prior to the request if we were spoofing during
+  // this prevents sessions hijacking even for restful webservice users
+  if (isset($_GET['render-as']) && !empty($_restws_bypass_user) && in_array('SERVICE ACCOUNT', $_restws_bypass_user->roles)) {
+    global $user;
+    $user = $_restws_bypass_user;
+  }
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function elmsln_core_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'elmsln_core_user_xapi_data':
+    // ensure they have access to see this account based on placement
+    if (arg(0) == 'user') {
+      $account = user_load(arg(1));
+    }
+    else {
+      $account = $GLOBALS['user'];
+    }
+    if (_elmsln_core_data_access('user', $account)) {
+      $block['subject'] = '';
+      $block['content'] = _elmsln_core_user_xapi_data();
+    }
+    break;
+    case 'elmsln_navigation_l1':
+      $block['subject'] = t('Navigation');
+      // get current item, load everything at top level
+      $item = menu_link_get_preferred();
+      $tree = menu_tree_all_data('menu-elmsln-navigation', $item, 1);
+      $block['content'] = menu_tree_output($tree);
+    break;
+    case 'elmsln_navigation_l2':
+      $block['subject'] = t('Sub-navigation');
+      // get current, test everything below for children
+      $item = menu_link_get_preferred();
+      $item2 = $item;
+      // look at the parent if we are on level 2 item
+      if ($item['depth'] == 2) {
+        $item2 = menu_link_load($item['plid']);
+      }
+      // look at parent's parent if we are on level 3
+      elseif ($item['depth'] == 3) {
+        $item = menu_link_load($item['plid']);
+        $item2 = menu_link_load($item['plid']);
+      }
+      $tree = menu_tree_some_data('menu-elmsln-navigation', $item, 1, 2);
+      // ensure we aren't a step down
+      foreach ($tree as $branch) {
+        if ($branch['link']['link_path'] == $item2['link_path']) {
+          $below = $branch['below'];
+          continue;
+        }
+      }
+      // make sure we have something in order to render
+      if (isset($below)) {
+        $block['content'] = menu_tree_output($below);
+      }
+    break;
+    case 'elmsln_navigation_l3':
+      $block['subject'] = t('Sub-sub-navigation');
+      // get the curren item
+      $item = menu_link_get_preferred();
+      // don't bother loading for level 1
+      if ($item['depth'] != 1) {
+        $item2 = $item;
+        // if level 3 we need to load parent
+        if ($item['depth'] == 3) {
+          $item2 = menu_link_load($item['plid']);
+        }
+        $tree = menu_tree_some_data('menu-elmsln-navigation', $item, 2, 3);
+        // ensure we aren't down a step
+        foreach ($tree as $branch) {
+          if ($branch['link']['link_path'] == $item2['link_path']) {
+            $below = $branch['below'];
+            continue;
+          }
+        }
+        // make sure we have something in order to render
+        if (isset($below)) {
+          $block['content'] = menu_tree_output($below);
+        }
+      }
+    break;
+  }
+  return $block;
+}
+
+/**
+ * Provides the javascript integration for a simple block
+ * @return [type] [description]
+ */
+function _elmsln_core_ferpa_filter() {
+  drupal_add_js(drupal_get_path('module', 'elmsln_core') .'/js/ferpa_filter.js');
+  $form = array();
+  $form['ferpa_filter'] = array(
+    '#type' => 'checkbox',
+    '#id' => 'ferpa_filter',
+    '#description' => t('This will provide a blur across all user specific content.'),
+    '#title' => t('Enable FERPA protection'),
+    '#default_value' => 0,
+  );
+  return render($form);
+}
+
+/**
+ * Load user xapi data.
+ */
+function _elmsln_core_user_xapi_data() {
+  module_load_include('inc', 'elmsln_core', 'elmsln_core.pages');
+  return drupal_get_form('elmsln_core_data_form');
+}
+
+/**
+ * Implements hook_menu_alter.
+ * Send user to the CPR to edit the global profile.
+ */
+function elmsln_core_menu_alter(&$items) {
+  $elmsln_global_profile = variable_get('elmsln_global_profile', 'cpr');
+  if (elmsln_core_get_profile_key() != $elmsln_global_profile) {
+    // Override the user edit handler for our purpose.
+    $items['user/%user/edit']['page arguments'] = array('_elmsln_people_user_edit_page', 1);
+  }
+  if (elmsln_core_get_profile_key() != 'mooc') {
+    // change "View" to Details as this makes more sense typically
+    $items['node/%node/view']['title'] = 'Details';
+  }
+  else {
+    $items['node/%node/view']['title'] = 'View content';
+  }
+}
+
+/**
+ * Access callback for _elmsln_people_user_edit_page.
+ */
+function _elmsln_people_user_edit_page($form, &$form_state, $account, $category = 'account') {
+  // escape for admin users
+  if (_cis_connector_role_grouping('admin') && $GLOBALS['user']->uid != $account->uid) {
+    drupal_set_message(t('This is the user\'s local profile. If you want to modify their global profile masquerade as them to be redirected'), 'toast', FALSE);
+    module_load_include('inc', 'user', 'user.pages');
+    return user_profile_form($form, $form_state, $account, $category);
+  }
+  // Setup a variable that can be changed if someone doesn't want to use the CPR for global profiles.
+  $elmsln_global_profile = variable_get('elmsln_global_profile', 'cpr');
+  // @todo it would be nice to do this in one request instead of two
+  $user_data_name = _cis_connector_request('user.json?name=' . $account->name, array(), $elmsln_global_profile, TRUE);
+  if (!empty($user_data_name)) {
+    $user_data_name = json_decode($user_data_name->data);
+    if (!empty($user_data_name->list)) {
+      $user_data = _cis_connector_request('user/' . $user_data_name->list[0]->uid . '.json?display_mode=full', array(), $elmsln_global_profile, TRUE);
+      // Decode the data that comes in from the user object.
+      $user_data = json_decode($user_data->data);
+      // send user to the cpr we just defined and redirect them back to where they were.
+      _elmsln_core_remote_redirect($elmsln_global_profile, 'user', $user_data->uid, 'edit?destination=elmsln/redirect/' . elmsln_core_get_profile_key() . '/user/' . $account->uid . '&elmsln_course=' . _cis_connector_course_context());
+    }
+    else {
+      module_load_include('inc', 'user', 'user.pages');
+      return user_profile_form($form, $form_state, $account, $category);
+    }
+  }
+  else {
+    module_load_include('inc', 'user', 'user.pages');
+    return user_profile_form($form, $form_state, $account, $category);
+  }
+}
+
+/**
+ * Implements hook_user_view_alter().
+ */
+function elmsln_core_user_view_alter(&$build) {
+  // Remove default user history etc...
+  $build['summary']['#title'] = '';
+  $build['summary']['member_for'] = '';
+}
+
+/**
+ * Access callback for _elmsln_core_data_page.
+ */
+function _elmsln_core_data_access($etype, $entity) {
+  // make sure they can view LRS data as well as view this entity
+  // This should take into account LRS permission + OG / section
+  // or any other permissions related to users, files, etc
+  if (user_access('view elmsln lrs data') && entity_access('view', $etype, $entity)) {
+    return TRUE;
+  }
+  elseif (user_access('view own elmsln lrs data') && $etype == 'user' && $entity->uid == $GLOBALS['user']->uid) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Implementation of hook_node_view().
+ */
+function elmsln_core_node_view($node, $view_mode, $langcode) {
+  if ($view_mode == 'full' && $node->type == 'page' && module_exists('foundation_access_ux')) {
+    // only do this for nodes for now
+    if ($node && !empty($node->content['body']) && isset($node->content['body'][0]['#markup'])) {
+      // add items in context
+      if (user_access('add item in context')) {
+        // target p tags to inject a content hash id
+        $search = '/<p>(.*?)<\/p>/s';
+        // pregmatch all paragraphs for simplicity
+        preg_match_all($search, $node->content['body'][0]['#markup'], $results);
+        $node->content['body'][0]['#markup'] = preg_replace_callback($search, '_elmsln_core_paragraph_replace', $node->content['body'][0]['#markup']);
+        // brings in the JS stuff to allow in context editing across systems
+        drupal_add_js(drupal_get_path('module', 'elmsln_core') . '/js/elmsln-core-in-context.js');
+      }
+      // target the scrollspy template style
+      $search = '/<h([1-4])(.*?)>(.*?)<\/h(.*?)>/s';
+      // pregmatch the anchor and title for the heading
+      preg_match_all($search, $node->content['body'][0]['#markup'], $results);
+      $node->content['body'][0]['#markup'] = preg_replace_callback($search, '_elmsln_core_scrollspy_replace', $node->content['body'][0]['#markup']);
+    }
+  }
+}
+
+/**
+ * Implements hook_field_extra_fields_alter().
+ */
+function elmsln_core_field_extra_fields_alter(&$info) {
+  // do the magic so we can use these as individual buttons;
+  // this is one of the stupidest drupal conventions ever to overcome
+  foreach (node_type_get_types() as $type) {
+    if (module_exists('hidden_nodes')) {
+      $info['node'][$type->type]['form']['hidden_nodes'] = array(
+        'label' => t('Hidden nodes'),
+        'description' => t('Hidden nodes'),
+        'weight' => 100,
+      );
+    }
+    if (module_exists('book')) {
+      $info['node'][$type->type]['form']['book'] = array(
+        'label' => t('Outline'),
+        'description' => t('Book outline configuration'),
+        'weight' => 100,
+      );
+    }
+    $info['node'][$type->type]['form']['options'] = array(
+      'label' => t('Publishing'),
+      'description' => t('Additional publishing options'),
+      'weight' => 100,
+    );
+    $info['node'][$type->type]['form']['author'] = array(
+      'label' => t('Author'),
+      'description' => t('Author settings'),
+      'weight' => 100,
+    );
+    $info['node'][$type->type]['form']['path'] = array(
+      'label' => t('Path'),
+      'description' => t('Path settings'),
+      'weight' => 100,
+    );
+    $info['node'][$type->type]['form']['revision_information'] = array(
+      'label' => t('Revision info'),
+      'description' => t('Revision settings'),
+      'weight' => 100,
+    );
+  }
+}
+
+/**
+ * Callback to convert preg_replace into what we need it to be
+ * since we have to process some of the elements based on position
+ * in the HTML.
+ */
+function _elmsln_core_paragraph_replace($matches) {
+  static $key;
+  if (empty($key)) {
+    $key = 0;
+  }
+  return '<p class="elmsln-core-in-context" id="' . hash('md5', 'p' . $key++) . '">' . $matches[1] .'</p>';
+}
+
+/**
+ * Callback to convert preg_replace into what we need it to be
+ * since we have to process some of the elements based on position
+ * in the HTML.
+ */
+function _elmsln_core_scrollspy_replace($matches) {
+  static $key;
+  if (empty($key)) {
+    $key = 0;
+  }
+  return '<h' . $matches[1] . $matches[2] .' data-scrollspy="scrollspy" id="' . hash('md5', 'h' . $key++) . '">' . $matches[3] .'</h' . $matches[4] . '>';
+}
+
+/**
+ * Implements hook_horizontal_tabs().
+ */
+function elmsln_core_horizontal_tabs($variables) {
+  $element = $variables['element'];
+  // Add required JavaScript and Stylesheet.
+  drupal_add_library('elmsln_core', 'materialize-tabs');
+  $output = '<h2 class="element-invisible">' . (!empty($element['#title']) ? $element['#title'] : t('Materialize Tabs')) . '</h2>';
+  $output .= '<div class="horizontal-tabs-panes">' . $element['#children'] . '</div>';
+
+  return $output;
+}
+
+/**
+ * Implements hook_library().
+ */
+function elmsln_core_library() {
+
+  $path = drupal_get_path('theme', 'foundation_access');
+  // Horizontal Tabs.
+  $libraries['materialize-tabs'] = array(
+    'title' => 'Materialize Tabs',
+    'website' => 'http://materializecss.com/tabs.html',
+    'version' => '0.97.7',
+    'js' => array(
+      $path . '/js/materialize-tabs.js' => array(),
+    ),
+    'css' => array(
+      $path . '/css/materialize-tabs.css' => array(),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_libraries_info().
+ */
+function elmsln_core_libraries_info() {
+  $libraries['materialize'] = array(
+    'name'              => 'Materialize',
+    'vendor url'        => 'http://materializecss.com/',
+    'download url'      => 'http://materializecss.com/getting-started.html',
+    'version' => '0.97.7',
+    'files'             => array(
+      'js' => array(
+        'js/materialize.js',
+      ),
+      'css' => array(
+        'css/materialize.css',
+      ),
+    ),
+    'variants'          => array(
+      'minified' => array(
+        'files' => array(
+          'js' => array(
+            'js/materialize.min.js',
+          ),
+          'css' => array(
+            'css/materialize.min.css',
+          ),
+        ),
+      ),
+      'source'   => array(
+        'files' => array(
+          'js' => array(
+            'js/materialize.js',
+          ),
+          'css' => array(
+            'css/materialize.css',
+          ),
+        ),
+      ),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Allow for structured redirecting to other tools in the network.
+ *
+ * @param  string  $tool     tool to connect to in the registry
+ * @param  string  $type     entity type to point to
+ * @param  int     $etid     entity id
+ * @param  string  $op       view, edit, delete, etc, the entity operations
+ *
+ * @return                   nothing returned, should redirect to remote space
+ */
+function _elmsln_core_remote_redirect($tool, $type, $etid, $op) {
+  if (empty($etid)) {
+    $etid = '';
+  }
+  if (empty($op)) {
+    $op = 'view';
+  }
+  if ($settings = _cis_connector_build_registry($tool)) {
+    $instance = '/';
+    if (isset($settings['instance']) && $settings['instance']) {
+      $instance = '/' . _cis_connector_course_context() . '/';
+    }
+    if ($type == 'field_sections') {
+      $type = 'field-collection/field-sections';
+    }
+    $address = _cis_connector_format_address($settings, $instance, 'front') . $type;
+    if (!empty($etid)) {
+      $address .= '/' . $etid . '/' . $op;
+    }
+    // weird encoding work around specific to contextual shortcode redirects
+    if (isset($_GET['amp;destination'])) {
+      $_GET['destination'] = $_GET['amp;destination'];
+      unset($_GET['amp;destination']);
+    }
+
+    // allow for redirecting back to whatever was set
+    if (isset($_GET['destination'])) {
+      $address .= '?destination=' . $_GET['destination'];
+      if (isset($_GET['elmsln_course'])) {
+        $address .= '&elmsln_course=' . _cis_connector_course_context();
+      }
+    }
+    elseif (isset($_GET['elmsln_course'])) {
+      $address .= '?elmsln_course=' . _cis_connector_course_context();
+    }
+    // support for iframe based redirecting
+    elseif (isset($_GET['entity_iframe'])) {
+      $address .= '?entity_iframe=1&modal=1';
+    }
+    // figure out the redirect path as dictated by forms
+    if (isset($_GET['redirectPath'])) {
+      $tmp = explode('/', $_GET['redirectPath']);
+    }
+    // fallback for CID target
+    elseif (isset($_GET['elmsln_cid_target'])) {
+      $tmp = explode('/', $_GET['elmsln_cid_target']);
+    }
+    // double redirect which later triggers a redirect
+    // this is inception level stuff
+    if (isset($_GET['addHash']) && !isset($tmp)) {
+      $address .= '&addHash=' . $_GET['addHash'];
+    }
+    // support hash redirect
+    if (isset($_GET['addHash']) && isset($tmp) && !empty($etid)) {
+      if (count($tmp) > 1) {
+        $tmp_entity_type = $tmp[0];
+        $tmp_item = $tmp[1];
+      }
+      // special case for harmony thread
+      if ($tmp_entity_type == 'thread') {
+        $tmp_entity_type = 'harmony_thread';
+      }
+      // replace the targetted item
+      $shortcode = '[ciscode|rev=1|tool=' . elmsln_core_get_profile_key() . '|item=' . $tmp_item . '|entity_type=' . $tmp_entity_type . ']';
+      $request = array(
+        'method' => 'POST',
+        'api' => '1',
+        'bucket' => $tool,
+        'path' => $instance,
+        'data' => array(
+          'elmsln_module' => 'elmsln_api',
+          'elmsln_callback' => 'hash_insert',
+          'etid' => $etid,
+          'type' => $type,
+          'hash' => $_GET['addHash'],
+          'token' => $shortcode,
+        ),
+      );
+      $response = _elmsln_api_request($request);
+    }
+    // look for a CID to destroy prior to redirect, this should ensure
+    // that the cached references to the item just modified are deleted
+    // as the user gets there so they end up repopulating caches with
+    // the data they just changed, always ensuring its fresh!
+    if (isset($_GET['elmsln_cid_target'])) {
+      $cid = 'elmsln:' . elmsln_core_get_profile_key() . ':';
+      $path = explode('/', $_GET['elmsln_cid_target']);
+      if (count($path) > 1) {
+        $cid .= $path[0] . ':' . $path[1] . ':';
+      }
+      // sync the service but do it non-blocking
+      $request = array(
+        'method' => 'POST',
+        'api' => '1',
+        'bucket' => $tool,
+        'path' => $instance,
+        'data' => array(
+          'elmsln_module' => 'elmsln_api',
+          'elmsln_callback' => 'clear_cache_bin',
+          'bin' => 'cis_connector',
+          'cid' => $cid,
+        ),
+      );
+      $response = _elmsln_api_request($request);
+    }
+    $args = arg();
+    // support more then our 6 arguments so we can support
+    // complex deep link redirects while still being triggered
+    // by the minimum required to get there (elmsln/redirect/%/%)
+    if (count($args) > 6) {
+      for ($i = 6; $i < count($args); $i++) {
+        $address .= '/' . $args[$i];
+      }
+    }
+    // redirect over to this location
+    header('Location: ' . $address, TRUE, 302);
+    // drupal_goto has this, says its important incase numeric code not understood
+    drupal_exit($address);
+  }
+  return t('This is not a valid tool in the network to create a link to.');
+}
+
+/**
+ * Implements hook_drupal_goto_alter().
+ */
+function elmsln_core_drupal_goto_alter(&$path, &$options, &$http_response_code) {
+  // helper to propagate contextual data on redirects between systems
+  if (strpos($path, 'elmsln/redirect') === 0) {
+    // make sure course passes down through forms
+    // it's trippy but because elmsln/redirect doesn't load up using drupal_goto
+    // but is instead pointed to via one, this should ensure that we only ever
+    // do our remote cid destruction when needed and in the correct direction!
+    if (isset($_GET['elmsln_course'])) {
+      // support defining course context at time of redirect
+      // avoids some NASTY cache redirect loop issues
+      if ($_GET['elmsln_course'] == 1) {
+        $options['query']['elmsln_course'] = _cis_connector_course_context();
+      }
+      else {
+        $options['query']['elmsln_course'] = filter_xss($_GET['elmsln_course']);
+      }
+    }
+    if (isset($_GET['addHash'])) {
+      $options['query']['addHash'] = filter_xss($_GET['addHash']);
+    }
+    global $__redirect;
+    $options['query']['redirectPath'] = filter_xss($__redirect);
+    $options['query']['elmsln_cid_target'] = current_path();
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function elmsln_core_permission() {
+  return array(
+    'access elmsln administration areas' =>  array(
+      'title' => t('Administer ELMSLN configuration'),
+      'description' => t('Grants access to administrative areas of ELMSLN like network configuration and settings pages.'),
+    ),
+    'view elmsln lrs data' =>  array(
+      'title' => t('View LRS data'),
+      'description' => t('Grants access to pages that display elmsln\'s core LRS integration / support.'),
+      'restrict access' => TRUE,
+    ),
+    'view own elmsln lrs data' =>  array(
+      'title' => t('View own LRS data'),
+      'description' => t('Grants access to the user\'s own set of data being collected.'),
+    ),
+    'view form as json' =>  array(
+      'title' => t('View form as JSON'),
+      'description' => t('Return any form as a JSON array'),
+      'restrict access' => TRUE,
+    ),
+    'add item in context' =>  array(
+      'title' => t('Add item in context'),
+      'description' => t('Allow for inserting any item between paragraphs.'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_preprocess().
+ *
+ * Add a class to match our view-modes
+ */
+function elmsln_core_preprocess(&$variables, $hook) {
+  if ($hook == 'node') {
+    $variables['classes_array'][] = $hook . '-view-mode-' . $variables['view_mode'];
+  }
+}
+
+/**
+ * Implements hook_page_build().
+ */
+function elmsln_core_page_build(&$page) {
+  // some additional clean up / settings
+  $colors = _cis_lmsless_get_distro_classes(elmsln_core_get_profile_key());
+  $preconnect = array(
+    '#type' => 'markup',
+    '#markup' => '
+    <link rel="preconnect" crossorigin href="https://fonts.googleapis.com">
+    <style>
+    :root {
+      --elmsln-system-color-text:' . $colors['code_text'] . ';
+      --elmsln-system-color-dark:' . $colors['color_code_dark'] . ';
+      --elmsln-system-color:' . $colors['code'] . ';
+    }
+  </style>',
+  );
+  drupal_add_html_head($preconnect, 'elmsln_core');
+  if (user_access('access contextual links')) {
+    drupal_add_library('contextual', 'contextual-links');
+  }
+  // obscure what powers this for security reasons
+  drupal_add_http_header('Server', 'something', FALSE);
+  drupal_add_http_header('X-Powered-By', 'something', FALSE);
+  // enable jquery cookie for all pages since we store a bunch of stuff local to the user account
+  drupal_add_library('system', 'jquery.cookie');
+  // resizable library
+  drupal_add_library('system', 'ui.resizable');
+  // voice support if enabled
+  if (module_exists('voicecommander')) {
+    drupal_add_js(drupal_get_path('module', 'elmsln_core') . '/js/elmsln-core.js');
+  }
+  // xapi context iframe sniffer
+  if (module_exists('tincanapi') && !path_is_admin(current_path())) {
+    drupal_add_js(drupal_get_path('module', 'elmsln_core') . '/js/elmsln-core-xapi-context.js', array('weight' => 1000));
+    // see if we should do some tracking on this path for LRS
+    if (!_entity_iframe_mode_enabled() && arg(1) != 'course-data' && !in_array(arg(2), array('data', 'edit', 'devel', 'revisions', 'outline')) && _cis_connector_system_type() != 'authority') {
+      // got in here, now do the node look up if there is one to match tincanapi_content_types
+      // if not then just track it
+      if (arg(0) == 'node' && $node = menu_get_object()) {
+        // @see tincanapi_content_types_node_view
+        $content_types = array_filter(variable_get('tincanapi_content_types', array()));
+        $view_modes = array_filter(variable_get('tincanapi_content_types_view_modes', array()));
+        // page build will be for a "full" view mode
+        if (in_array($node->type, $content_types) && in_array('full', $view_modes) && !isset($_GET['no-track'])) {
+          drupal_add_js(drupal_get_path('module', 'elmsln_core') . '/js/elmsln-core-xapi-viewed.js', array('weight' => 1001));
+        }
+      }
+      else {
+        drupal_add_js(drupal_get_path('module', 'elmsln_core') . '/js/elmsln-core-xapi-viewed.js', array('weight' => 1001));
+      }
+      $content_types = array_filter(variable_get('tincanapi_content_types', array()));
+      $view_modes = array_filter(variable_get('tincanapi_content_types_view_modes', array()));
+    }
+  }
+  // devel usability improvement
+  if (module_exists('devel') &&  !path_is_admin(current_path()) && user_access('access devel information')) {
+    drupal_add_js(drupal_get_path('module', 'elmsln_core') . '/js/elmsln-core-devel.js', array('weight' => -1000));
+  }
+  // get the configuration so we can set domain from here to enable
+  // secure and policy compliant access to sub-domain cookies on
+  // the client side. This clears up MULTIPLE issues at once and is
+  // awesome!
+  $cfg = _elmsln_core_get_cfg();
+  $settings = _cis_connector_build_registry(elmsln_core_get_profile_key());
+  // see if this is an active learner or not, only thing we care about currently
+  if (_cis_connector_role_grouping('active learner')) {
+    $role = 'student';
+  }
+  elseif (_cis_connector_role_grouping('staff')) {
+    $role = 'staff';
+  }
+  elseif (_cis_connector_role_grouping('teacher')) {
+    $role = 'teacher';
+  }
+  else {
+    $role = 'other';
+  }
+  if (isset($GLOBALS['user']->uuid)) {
+    $uuid = $GLOBALS['user']->uuid;
+  }
+  else {
+    $uuid = $GLOBALS['user']->uid;
+  }
+  $beacon = '';
+  if (isset($_GET['xapibeacon'])) {
+    $beacon = filter_xss($_GET['xapibeacon']);
+  }
+  // pass variables to js
+  $js_variables = array(
+    'elmslnCore' => array(
+      'domain' => '.' . $cfg['address'],
+      'name' => $settings['default_title'],
+      'distro' => elmsln_core_get_profile_key(),
+      'course' => _cis_connector_course_context(),
+      'section' => _cis_connector_section_context(),
+      'title' => drupal_get_title(),
+      'url' => url(current_path(), array('absolute' => TRUE)),
+      'role' => $role,
+      'uname' => filter_xss($GLOBALS['user']->name),
+      'xapisession' => drupal_get_token($uuid),
+      'xapibeacon' => $beacon,
+    )
+  );
+  $js_variables['tincanapi'] = $js_variables;
+  // form path
+  if (!empty(arg(1))) {
+    $js_variables['elmslnCore']['path'] = arg(0) . '/' . arg(1) . '/view';
+  }
+  drupal_add_js($js_variables, 'setting');
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function elmsln_core_entity_insert($entity, $type) {
+  if (isset($_GET['addHash'])) {
+    global $__redirect;
+    $uri = entity_uri($type, $entity);
+    $__redirect = $uri['path'];
+  }
+}
+
+/**
+ * Return the links that can be used to build stuff in-context
+ */
+function _elmsln_core_in_context_list() {
+  // @todo static cache this
+  // @todo query cache this, it'll basically always be the same, generally
+  $links = array();
+  $icon_map = _elmsln_core_icon_map();
+  // ask the places we know about for what this user can embed
+  $requests = array(
+    'icor' => array(
+      'method' => 'POST',
+      'api' => '1',
+      'bucket' => 'icor',
+      'path' => '/',
+      'data' => array(
+        'elmsln_module' => 'elmsln_api',
+        'elmsln_callback' => 'available_types',
+        'username' => $GLOBALS['user']->name,
+      ),
+    ),
+    'elmsmedia' => array(
+      'method' => 'POST',
+      'api' => '1',
+      'bucket' => 'elmsmedia',
+      'path' => '/',
+      'data' => array(
+        'elmsln_module' => 'elmsln_api',
+        'elmsln_callback' => 'available_types',
+        'username' => $GLOBALS['user']->name,
+      ),
+    ),
+  );
+  $responses = _elmsln_api_requests($requests);
+  foreach ($responses as $key => $response) {
+    $tmp = json_decode($response);
+    foreach ((array) $tmp->types as $typeobj) {
+      $icon = str_replace(' ', '_', drupal_strtolower($typeobj->name));
+      // ignore these for now
+      if (!in_array($icon, array('figure_label', 'media_list', 'timeline', 'map', 'timeline_date', 'static_content', 'poll', 'jmol', 'interactive_player', 'image_gallery'))) {
+        if (isset($icon_map[$icon])) {
+          $color = $icon_map[$icon]['color'];
+          if (isset($icon_map[$icon]['text'])) {
+            $textcolor = $icon_map[$icon]['text'];
+          }
+          else {
+            $textcolor = 'white-text';
+          }
+          $icon_render = '<lrnapp-fab-speed-dial-action icon="' . $icon_map[$icon]['icon'] . '" color="' . $icon_map[$icon]['color'] . '">' . $typeobj->name . '</lrnapp-fab-speed-dial-action>';
+        }
+        else {
+          $color = '';
+          $icon_render = '';
+        }
+        $options = array(
+          'html' => TRUE,
+          'attributes' => array(
+            'class' => array('elmsln-core-external-context-apply'),
+            'tabindex' => '-1',
+          ),
+        );
+        $links[] = '<li class="leaf">' . l($icon_render, 'elmsln/redirect/' . $key . '/node/add/' . str_replace('_', '-', $typeobj->type), $options) . '</li>';
+      }
+    }
+  }
+
+  return $links;
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function elmsln_core_admin_paths() {
+  $paths = array(
+    'imce' => TRUE,
+  );
+  return $paths;
+}
+
+/**
+ * Implements hook_form_node_form_alter().
+ */
+function elmsln_core_form_node_form_alter(&$form, &$form_state, $form_id) {
+  // only apply these to new nodes
+  if (arg(0) == 'node' && arg(1) == 'add') {
+    // prepopulate course and section references if they exist
+    if (isset($form['field_cis_course_ref']['und']['#default_value']) && empty($form['field_cis_course_ref']['und']['#default_value']
+  ) && $course_nid = _cis_connector_get_course_by_machine_name(_cis_connector_course_context())) {
+      $form['field_cis_course_ref']['und']['#default_value'] = $course_nid;
+    }
+    // prepopulate section reference if it exists in the current context for whatever reason
+    // and hasn't existed previously but ONLY for new stuff
+    if (isset($form['og_group_ref']['und'][0]['default']['#default_value']) && empty($form['og_group_ref']['und'][0]['default']['#default_value']
+  ) && module_exists('cis_section') && $section_nid = _cis_section_load_section_by_id(_cis_connector_section_context()) && !in_array(elmsln_core_get_profile_key(), array('elmsmedia', 'icor'))) {
+      $form['og_group_ref']['und'][0]['default']['#default_value'] = $section_nid;
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function elmsln_core_form_a11y_admin_settings_alter(&$form, &$form_state) {
+  // inject the correct value here
+  $cfg = _elmsln_core_get_cfg();
+  $form['a11y_domain']['#default_value'] = '.' . $cfg['address'];
+}
+
+/**
+ * Implements hook_url_inbound_alter().
+ *
+ * Sets the active section / course for a user based on a query parameter.
+ */
+function elmsln_core_url_inbound_alter(&$path, $original_path, $path_language) {
+  $query_params = drupal_get_query_parameters();
+  $changed = FALSE;
+  // course
+  if (isset($query_params['elmsln_active_course']) && $course = $query_params['elmsln_active_course']) {
+    $_SESSION['cis_course_context'] = $course;
+    // Remove the active section query parameter and proceed to the url
+    //unset($query_params['elmsln_active_course']);
+    //$changed = TRUE;
+  }
+  if (isset($query_params['elmsln_active_section']) && $section_id = $query_params['elmsln_active_section']) {
+    // get a list of allowed sections for this user
+    $sections = array();
+    // select field section data
+    $query = new EntityFieldQuery();
+    // pull all nodes
+    $query->entityCondition('entity_type', 'node')
+    // that are sections
+    ->entityCondition('bundle', 'section')
+    // that are published
+    ->propertyCondition('status', 1);
+    $result = $query->execute();
+    // ensure we have results
+    if (isset($result['node'])) {
+      $nids = array_keys($result['node']);
+      $results = entity_load('node', $nids);
+      // convert to a readable array of options
+      foreach ($results as $val) {
+        $section = $val->field_section_id['und'][0]['safe_value'];
+        $sections[$section] = $val->title;
+      }
+    }
+    // check if the proposed section is in the list of allowed sections
+    if (in_array($section_id, $sections) || _cis_connector_role_grouping('staff')) {
+      // check for transition from authority to service as name of section changes
+      if (_cis_connector_is_master($section_id) && _cis_connector_system_type() == 'service' && strpos($section_id, '_')) {
+        $section_id = CIS_SECTION_MASTER;
+      }
+      elseif(_cis_connector_is_master($section_id) && _cis_connector_system_type() == 'authority') {
+        $section_id = CIS_SECTION_MASTER . '_' . _cis_connector_course_context();
+      }
+      // set the active session
+      $_SESSION['cis_section_context'] = $section_id;
+    }
+    // Remove the active section query parameter and proceed to the url
+    unset($query_params['elmsln_active_section']);
+    $changed = TRUE;
+  }
+  // look or cross-network masquerade
+  if (isset($query_params['elmsln_masquerade']) && $masqname = $query_params['elmsln_masquerade']) {
+    $changed = TRUE;
+    // Remove masquerade item
+    unset($query_params['elmsln_masquerade']);
+    // we were masquerading, but now we're back at a system after we stopped
+    if ($masqname == '__back' && isset($_SESSION['masquerading'])) {
+      masquerade_switch_back();
+    }
+    // odd case but make sure we don't switch to ourselves before allowing a switch
+    else if (isset($GLOBALS['user']->name) && $masqname != $GLOBALS['user']->name) {
+      // convert name to uid if possible
+      if ($tmp = user_load_by_name($masqname)) {
+        // perform the masquerade of the account which automatically does permission checks
+        masquerade_switch_user($tmp->uid);
+      }
+    }
+  }
+  // ensure we skimmed something off before redirect looping!
+  if ($changed) {
+    drupal_goto($path, array('query' => $query_params));
+  }
+}
+
+/**
+ * Implements hook_url_outbound_alter().
+ *
+ * Appends section context query parameter to
+ * all outbound links going to other ELMSLN subdomains.
+ */
+function elmsln_core_url_outbound_alter(&$path, &$options, $original_path) {
+  // do an easy inital check to see if it's going to an external site
+  // internal links shouldn't have a protocol
+  if (strpos($path, '://')) {
+    global $base_url;
+    $current_domain = _cis_connector_url_get_properties($base_url);
+    // verify the current domain is in the outgoing domain
+    if (strpos($original_path, $current_domain['domain'])) {
+      $outgoing_domain = _cis_connector_url_get_properties($original_path);
+      // verify that the link is going to a separate subdomain
+      if ($current_domain['subdomain'] != 'online' && $current_domain['subdomain'] != $outgoing_domain['subdomain']) {
+        // keep section context
+        $current_section = _cis_connector_section_context();
+        if (isset($current_section) && $current_section) {
+          // append the section context query parameter to the outgoing url
+          $options['query']['elmsln_active_section'] = $current_section;
+        }
+        // keep course context
+        $current_course = _cis_connector_course_context();
+        if (isset($current_course) && $current_course) {
+          // append the section context query parameter to the outgoing url
+          $options['query']['elmsln_active_course'] = $current_course;
+        }
+        // keep masquerade context
+        if (isset($_SESSION['masquerading'])) {
+          $options['query']['elmsln_masquerade'] = $GLOBALS['user']->name;
+        }
+        else {
+          $options['query']['elmsln_masquerade'] = '__back';
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Return a list of available icon libraries that other modules have defined.
+ * @return [type] [description]
+ */
+function _elmsln_core_icon_libraries() {
+  $icon_libraries = module_invoke_all('icon_library');
+  drupal_alter('icon_library', $icon_libraries);
+  return $icon_libraries;
+}
+
+/**
+ * Implements hook_user_login().
+ */
+function elmsln_core_user_login(&$edit, $account) {
+  // support things knowing when someone is switching accounts
+  if (isset($_SESSION['about_to_masquerade'])) {
+    unset($_SESSION['about_to_masquerade']);
+    unset($_SESSION['cis_section_context']);
+  }
+}
+
+/**
+ * Implements hook_icon_library().
+ */
+function elmsln_core_icon_library() {
+  return array(
+    'foundation_access' => array(
+      'title' => t('ELMS:LN icon set'),
+    ),
+    'material' => array(
+      'title' => t('Material design icon set'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_fa_a11y().
+ * Provides keyboard shortcut buttons
+ */
+function elmsln_core_fa_a11y() {
+  return array(
+    'keyboard' => array(
+      '#type' => 'fieldset',
+      '#title' => t('Keyboard shortcuts'),
+      '#description' => t('Use these keys to navigate quickly'),
+      '#collapsed' => TRUE,
+      '#collapsible' => TRUE,
+      '#weight' => -8,
+      '#attributes' => array(
+        'class' => array(
+          'collapsible',
+          'form-wrapper',
+          'collapsed',
+        ),
+        'data-voicecommand' => 'keyboard shortcuts',
+      ),
+      '#materialize' => array(
+        'type' => 'collapsible',
+        'icon' => 'hardware:keyboard',
+      ),
+      'keys' => array(
+        '#markup' =>
+        '<div class="keyboard-short">
+          <div class="keyboard-short__group">
+            <span>' . t('View options') . '</span>
+            <div class="keyboard-short__key">Alt</div>
+            <div class="keyboard-short__key">Shift</div>
+          </div>
+        </div>'
+      ),
+    ),
+    'ferpa' => array(
+      '#type' => 'fieldset',
+      '#title' => t('FERPA filter'),
+      '#description' => t('Options to obscure content from view which has been marked FERPA in nature. This allows showcasing real work safely in screenshots and demonstrations.'),
+      '#collapsed' => TRUE,
+      '#collapsible' => TRUE,
+      '#weight' => -10,
+      '#attributes' => array(
+        'class' => array(
+          'collapsible',
+          'form-wrapper',
+          'collapsed',
+        ),
+        'data-voicecommand' => 'ferpa filter',
+      ),
+      '#materialize' => array(
+        'type' => 'collapsible',
+        'icon' => 'visibility',
+      ),
+      'ferpa' => array(
+        '#markup' => _elmsln_core_ferpa_filter(),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_voice_command().
+ */
+function elmsln_core_voice_command() {
+  // see what we have in the registry
+  $commands["%phrase play (video)"] =  array(
+    'callback' => 'Drupal.voicecommanderControlVideo',
+  );
+  $commands["%phrase pause (video)"] =  array(
+    'callback' => 'Drupal.voicecommanderControlVideo',
+  );
+  $commands["%phrase where am i"] =  array(
+    'callback' => 'Drupal.voicecommanderWhereAmI',
+  );
+  $commands["%phrase word count"] =  array(
+    'callback' => 'Drupal.voicecommanderWordCount',
+  );
+  $commands["make coffee"] =  array(
+    'callback' => 'Drupal.voicecommanderMakeCoffee',
+  );
+  $commands["all your base"] =  array(
+    'callback' => 'Drupal.voicecommanderAllYourBase',
+  );
+  $commands["close"] =  array(
+    'callback' => 'Drupal.voicecommanderCloseMenus',
+  );
+  $commands["thank you"] =  array(
+    'callback' => 'Drupal.voicecommanderThankYou',
+  );
+  if (arg(1) == 'error') {
+    $commands["open the pod bay doors"] =  array(
+      'callback' => 'Drupal.voicecommanderHal9000',
+    );
+  }
+  return array(
+    'elmsln_core' => array('commands' => $commands)
+  );
+}
+
+/**
+ * Map of materializeCSS icon / color associations when wanting to make them into icons.
+ * @return array   associative array of icon / colors
+ */
+function _elmsln_core_icon_map() {
+  // statically cache future calls
+  $map = &drupal_static(__FUNCTION__);
+  if (!isset($map)) {
+    $map = array(
+      'roster' => array(
+        'color' => 'orange',
+        'icon' => 'social:person-add',
+      ),
+      'file' => array(
+        'color' => 'deep-orange darken-4',
+        'icon' => 'attachment',
+      ),
+      'zip_file' => array(
+        'color' => 'deep-orange darken-4',
+        'icon' => 'archive',
+      ),
+      'timeline_item' => array(
+        'color' => 'pink',
+        'icon' => 'device:access-time',
+      ),
+      'timeline' => array(
+        'color' => 'red darken-2',
+        'icon' => 'timeline',
+      ),
+      'map_point' => array(
+        'color' => 'light-green darken-4',
+        'icon' => 'maps:place',
+      ),
+      'map' => array(
+        'color' => 'green darken-3',
+        'icon' => 'maps:map',
+      ),
+      'jmol' => array(
+        'color' => 'blue',
+        'icon' => 'social:share',
+      ),
+      'poll' => array(
+        'color' => 'light-blue',
+        'icon' => 'social:poll',
+      ),
+      'course_offering' => array(
+        'color' => 'blue',
+        'icon' => 'social:people-outline',
+      ),
+      'setup_a_course' => array(
+        'color' => 'red darken-2',
+        'icon' => 'social:school',
+      ),
+      'program' => array(
+        'color' => 'pink',
+        'icon' => 'code',
+      ),
+      'academic_area' => array(
+        'color' => 'green darken-4',
+        'icon' => 'account-balance',
+      ),
+      'global_resource' => array(
+        'color' => 'indigo',
+        'icon' => 'cloud',
+      ),
+      'course_access' => array(
+        'color' => 'blue',
+        'icon' => 'social:school',
+      ),
+      'system_access' => array(
+        'color' => 'indigo',
+        'icon' => 'cloud',
+      ),
+      'calendar_event' => array(
+        'color' => 'green darken-3',
+        'icon' => 'event',
+      ),
+      'audio' => array(
+        'color' => 'green darken-3',
+        'icon' => 'av:music-video',
+      ),
+      'document' => array(
+        'color' => 'light-green darken-4',
+        'icon' => 'editor:insert-drive-file',
+      ),
+      'external_video' => array(
+        'color' => 'red darken-2',
+        'icon' => 'av:video-library',
+      ),
+      'figure_label' => array(
+        'color' => 'deep-orange darken-4',
+        'icon' => 'label-outline',
+      ),
+      'h5p' => array(
+        'color' => 'deep-orange darken-4',
+        'icon' => 'maps:local-activity',
+      ),
+      'interactive_content' => array(
+        'color' => 'deep-orange darken-4',
+        'icon' => 'maps:local-activity',
+      ),
+      'image' => array(
+        'color' => 'deep-purple',
+        'icon' => 'image:photo',
+      ),
+      'image_gallery' => array(
+        'color' => 'teal',
+        'icon' => 'image:collections',
+      ),
+      'media_list' => array(
+        'color' => 'pink',
+        'icon' => 'image:collections',
+      ),
+      'static_content' => array(
+        'color' => 'blue',
+        'icon' => 'editor:insert-drive-file',
+      ),
+      'svg' => array(
+        'color' => 'indigo',
+        'icon' => 'device:graphic-eq',
+      ),
+      'video' => array(
+        'color' => 'purple',
+        'icon' => 'notification:ondemand-video',
+      ),
+      'duplicate_outline' => array(
+        'color' => 'green',
+        'icon' => 'content-copy',
+        'text' => 'black-text',
+      ),
+      'child_page' => array(
+        'color' => 'teal',
+        'icon' => 'editor:insert-drive-file',
+      ),
+      'thread' => array(
+        'color' => 'blue',
+        'icon' => 'communication:forum',
+      ),
+      'assignment' => array(
+        'color' => 'green',
+        'icon' => 'assignment',
+        'text' => 'black-text',
+
+      ),
+      'quiz' => array(
+        'color' => 'orange',
+        'icon' => 'assessment',
+      ),
+      // xAPI verbs
+      'viewed' => array(
+        'color' => 'blue',
+        'icon' => 'image:remove-red-eye',
+      ),
+      'started' => array(
+        'color' => 'red',
+        'icon' => 'flag',
+        'text' => 'black-text',
+      ),
+      'finished' => array(
+        'color' => 'green',
+        'icon' => 'places:golf-course',
+        'text' => 'black-text',
+      ),
+    );
+    // allow others to modify core associations
+    drupal_alter('elmsln_core_icon_map', $map);
+  }
+  return $map;
+}
+
+/**
+ * Implements hook_module_implements_alter().
+ */
+function elmsln_core_module_implements_alter(&$implementations, $hook) {
+  switch ($hook) {
+    // ensure elmsln_core fires first so everything else can alter the expected list
+    case 'cis_service_registry_alter':
+      $tmp = array('elmsln_core' => $implementations['elmsln_core']);
+      unset($implementations['elmsln_core']);
+      $implementations = $tmp + $implementations;
+    break;
+    case 'init':
+      // this adds .5 megs to memory footprint in testing and all it
+      // does it skim through breadcrumb links and removes ones
+      // listed as being blank. Hardly worth all the extra code on
+      // every page when we don't even use breadcrumbs in this manner
+      if (module_exists('special_menu_items')) {
+        unset($implementations['special_menu_items']);
+      }
+    break;
+  }
+}
+
+/**
+ * Implements hook_cis_service_registry_alter($keychain).
+ *
+ * Core support for mapping the core supported LRS
+ * to our registry. Then we can utilize our lrs variations
+ * of request calls more easily to get data from the LRS.
+ */
+function elmsln_core_cis_service_registry_alter(&$keychain) {
+  // build the keychain dynamically
+  $cfg = _elmsln_core_get_cfg();
+  $directories = array(
+    $cfg['elmsln'] . '/core/dslmcode/profiles/',
+    $cfg['elmsln'] . '/config/shared/drupal-7.x/tools/',
+  );
+  foreach ($directories as $directory) {
+    if (is_dir($directory)) {
+      foreach (scandir($directory) as $item) {
+        // see if we found an item here
+        if (!in_array($item, array('.', '..')) && is_dir($directory . $item . '/')) {
+          $tmp = explode('-', $item);
+          $distro = $tmp[0];
+          // if we have an info file, read if the values to make it real
+          if (!isset($keychain[$distro]) && file_exists($directory . $item . '/' . $distro . '.topology')) {
+            $keychain[$distro] = array(
+              'protocol' => $cfg['protocol'],
+              'service_address' => $cfg['serviceaddress'],
+              'address' => $cfg['address'],
+              'user' => strtoupper('SERVICE_' . $distro . '_' . $cfg['host']),
+              'mail' => strtoupper('SERVICE_' . $distro . '_' . $cfg['host']) . '@' . $cfg['emailending'],
+              'pass' => drupal_substr(hash('sha512', $distro . $cfg['salt']), 0, 30),
+            );
+            // support for alternate data- protocol for backend
+            if (isset($cfg['dataprotocol'])) {
+              $keychain[$distro]['dataprotocol'] = $cfg['dataprotocol'];
+            }
+            $file = file_get_contents($directory . $item . '/' . $distro . '.topology');
+            $lines = explode("\n", $file);
+            // read each line of the cfg file
+            foreach ($lines as $line) {
+              // make sure this line isn't a comment and has a = in it
+              if (strpos($line, '#') !== 0 && strpos($line, '=')) {
+                $tmp = explode('=', $line);
+                // ensure we have 2 settings before doing this
+                if (count($tmp) == 2) {
+                  $keyname = trim($tmp[0]);
+                  $value = str_replace('"', '', str_replace("'", '', trim($tmp[1])));
+                  switch ($keyname) {
+                    case 'subdomain':
+                      $keychain[$distro][$keyname] = $value;
+                      $keychain[$distro]['address'] = $value . '.' . $keychain[$distro]['address'];
+                      $keychain[$distro]['service_address'] = $cfg['serviceprefix'] . $value . '.' . $keychain[$distro]['service_address'];
+                    break;
+                    default:
+                      $keychain[$distro][$keyname] = $value;
+                    break;
+                  }
+                }
+              }
+            }
+            // support meta properties for authority / services
+            if ($keychain[$distro]['type'] == 'authority') {
+              $keychain[$distro]['ignore'] = TRUE;
+              $keychain[$distro]['instance'] = FALSE;
+            }
+            elseif ($keychain[$distro]['type'] == 'service') {
+              $keychain[$distro]['ignore'] = FALSE;
+              $keychain[$distro]['instance'] = TRUE;
+            }
+            elseif ($keychain[$distro]['type'] == 'custom') {
+              $keychain[$distro]['ignore'] = TRUE;
+              $keychain[$distro]['instance'] = FALSE;
+            }
+          }
+        }
+      }
+    }
+  }
+  // see if the most obvious variable isset
+  if (!isset($keychain[ELMSLN_CORE_LRS_KEYCHAIN]) && !empty(variable_get('tincanapi_endpoint', '')) && valid_url(variable_get('tincanapi_endpoint', ''), TRUE)) {
+    // calculate the protocol and address from the endpoint variable
+    $tmp = explode('://', variable_get('tincanapi_endpoint', ''));
+    $protocol = array_shift($tmp);
+    $tmp = explode('/', $tmp[0]);
+    $address = array_shift($tmp);
+    // build our standard connection keychain item for this new bucket
+    $keychain[ELMSLN_CORE_LRS_KEYCHAIN] = array(
+      'protocol' => $protocol,
+      'service_address' => $address,
+      'address' => $address,
+      'user' => variable_get('tincanapi_auth_user', ''),
+      'pass' => variable_get('tincanapi_auth_password', ''),
+      'instance' => FALSE,
+      'default_title' => t('Learning analytics'),
+      'ignore' => TRUE,
+      'type' => 'external',
+      'weight' => '0',
+      'group' => t('Administrative'),
+      'subdomain' => 'lrs',
+      'icon_library' => 'materialize',
+      'show_in_network' => '1',
+      'icon' => 'data_usage',
+      'color' => 'light-blue',
+      'color_dark' => 'darken-3',
+      'color_light' => 'lighten-3',
+      'color_text' => 'accessible-light-blue-text',
+      'color_outline' => 'light-blue-outline',
+      'color_code' => '#03a9f4',
+    );
+  }
+}
+
+/**
+ * Structured data call against the LRS backend. Typically for querying.
+ * @param  $query  array   following syntax of backend; usually mongodb
+ * @param  $cached boolean whether to use a cached response / store result
+ * @return   [<description>]
+ */
+function _elmsln_core_lrs_query($query, $cached = FALSE) {
+  // options
+  $options = array('method' => 'GET');
+  // while core support is for learning locker, there's not a lot of reason
+  // other then the end points and it being FOSS / PHP universe
+  $drivers = module_invoke_all('elmsln_lrs_drivers');
+  // allow for modification, only used if we have multiple backends
+  drupal_alter('elmsln_lrs_drivers', $drivers);
+  // magic variable which could be manually set in a config shared_settings.php
+  // to switch between LRS backends if that was ever desirable down the road
+  $driver = $drivers[variable_get('elmsln_lrs_platform', 'learninglocker-1.x')];
+  // same as above, you could ignore / override / swap out buckets to use for
+  // connecting. This opens the door for multiple dedicated LRSs based on the type
+  // of data they have or doing an LRS migration contextually down the road
+  $bucket = variable_get('elmsln_lrs_bucket', ELMSLN_CORE_LRS_KEYCHAIN);
+  // last minute to jump in and modify
+  drupal_alter('elmsln_lrs_query', $query);
+  // build the call to make which will go against the lrs bucket
+  $call = $driver['query'] . '?' . str_replace('\/', '/', urldecode(http_build_query($query)));
+  // generate the well structured request
+  $response = _cis_connector_request($call, $options, $bucket, $cached);
+  // ensure a response to connect in the first place
+  $data = FALSE;
+  if ($response) {
+    $data = drupal_json_decode($response->data);
+  }
+  return $data;
+}
+
+/**
+ * Implements hook_elmsln_lrs_drivers().
+ */
+function elmsln_core_elmsln_lrs_drivers() {
+  return array(
+    'learninglocker-1.x' => array(
+      'query' => 'api/v1/statements/aggregate',
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function elmsln_core_theme($existing, $type, $theme, $path) {
+  return array(
+    'elmsln_core_lrs_data' => array(
+      'variables' => array(
+        'datatitle' => t('LRS data'),
+        'filtertitle' => t('Filters applied:'),
+        'data' => array(),
+        'aggregates' => array(),
+      ),
+      'render element' => 'element',
+      'template' => 'templates/elmsln-core-lrs-data',
+    ),
+  );
+}
+
+/**
+ * Implements hook_tincanapi_ajax_data_alter().
+ */
+function elmsln_core_tincanapi_ajax_data_alter($module_name, &$data, $context) {
+  $settings = array();
+  // account for our own statements to pass through
+  if ($module_name == 'elmsln_core') {
+    $data['verb'] = array(
+      'id' => 'http://adlnet.gov/expapi/verbs/' . $context['verb'],
+      'display' => array(
+        'en-US' => $context['verb']
+      )
+    );
+    $data['object'] = array(
+      "objectType" => "Activity",
+      "id" => $context['id'],
+      "definition" => array(
+        "name" => array(
+          "en-US" => "Page: " . $context['title'],
+        ),
+        "type" => "http://orw.iminds.be/tincan/content/type/page"
+      )
+    );
+  }
+  // regardless of module see if our contextual settings are here
+  // and this way we can ship down elmslnCore's scope variables
+  // which will make our data-sets more meaningful for searching in LRSs later
+  if (isset($context['tincanapiSettings']['elmslnCore'])) {
+    // look for our ELMSLNCore settings
+    $settings = $context['tincanapiSettings']['elmslnCore'];
+  }
+  // check for items that came across, if we don't have them
+  // then attempt to inject them though that's probably not going to work
+  if (isset($settings['course'])) {
+    $course = filter_xss($settings['course']);
+  }
+  else {
+    $course = _cis_connector_course_context();
+  }
+  if (isset($settings['section'])) {
+    $section = filter_xss($settings['section']);
+  }
+  else {
+    $section = _cis_connector_section_context();
+  }
+  $title = '';
+  if (isset($settings['title'])) {
+    $title = filter_xss($settings['title']);
+  }
+  else {
+    $title = drupal_get_title();
+  }
+  $url = '';
+  if (isset($settings['url'])) {
+    $url = filter_xss($settings['url']);
+  }
+  else {
+    $url = url(current_path(), array('absolute' => TRUE));
+  }
+  $role = '';
+  if (isset($settings['role'])) {
+    $role = filter_xss($settings['role']);
+  }
+  else {
+    if (_cis_connector_role_grouping('active learner')) {
+      $role = 'student';
+    }
+    elseif (_cis_connector_role_grouping('staff')) {
+      $role = 'staff';
+    }
+    elseif (_cis_connector_role_grouping('teacher')) {
+      $role = 'teacher';
+    }
+    else {
+      $role = 'other';
+    }
+  }
+
+  // session set
+  if (isset($settings['session'])) {
+    $session = filter_xss($settings['session']);
+  }
+  else {
+    $session = drupal_get_token($GLOBALS['user']->uuid);
+  }
+
+  $data['context']['extensions'] = array(
+    'https://www.elmsln.org/x-api/elmsln-section' => $section,
+    'https://www.elmsln.org/x-api/elmsln-course' => $course,
+    'https://www.elmsln.org/x-api/elmsln-url-title' => $title,
+    'https://www.elmsln.org/x-api/elmsln-url' => $url,
+    'https://www.elmsln.org/x-api/elmsln-role' => $role,
+    'https://www.elmsln.org/x-api/elmsln-session' => $session,
+  );
+
+  // hypothesis if its set
+  if (isset($settings['hypothesis'])) {
+    $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-research-hypothesis'] = filter_xss($settings['hypothesis']);
+  }
+  // beacon if its set
+  if (isset($settings['beacon']) && !empty($settings['beacon'])) {
+    $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-beacon'] = filter_xss($settings['beacon']);
+  }
+  elseif (isset($settings['xapibeacon']) && !empty($settings['xapibeacon'])) {
+    $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-beacon'] = filter_xss($settings['xapibeacon']);
+  }
+  elseif (isset($_GET['xapibeacon']) && !empty($_GET['xapibeacon'])) {
+    $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-beacon'] = filter_xss($_GET['xapibeacon']);
+  }
+
+  // competency if its set
+  if (isset($settings['competency'])) {
+    $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-course-competency'] = filter_xss($settings['competency']);
+  }
+
+  // duration if its set
+  if (isset($settings['duration'])) {
+    $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-duration'] = filter_xss($settings['duration']);
+  }
+
+
+  // ensure that choice ids are strings to match data model
+  if (isset($data['object']['definition']['choices'])) {
+    foreach ($data['object']['definition']['choices'] as $key => $choice) {
+      if (is_int($data['object']['definition']['choices'][$key]['id'])) {
+        $data['object']['definition']['choices'][$key]['id'] = (string)$data['object']['definition']['choices'][$key]['id'];
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_tincanapi_data_alter().
+ */
+function elmsln_core_tincanapi_data_alter($module_name, &$data) {
+  // ensure we aren't double altering our statements
+  if (!isset($data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-section'])) {
+    $course = _cis_connector_course_context();
+    $section = _cis_connector_section_context();
+    $title = drupal_get_title();
+    $url = url(current_path(), array('absolute' => TRUE));
+    if (_cis_connector_role_grouping('active learner')) {
+      $role = 'student';
+    }
+    elseif (_cis_connector_role_grouping('staff')) {
+      $role = 'staff';
+    }
+    elseif (_cis_connector_role_grouping('teacher')) {
+      $role = 'teacher';
+    }
+    else {
+      $role = 'other';
+    }
+    $session = drupal_get_token($GLOBALS['user']->uuid);
+
+    $data['context']['extensions'] = array(
+      'https://www.elmsln.org/x-api/elmsln-section' => $section,
+      'https://www.elmsln.org/x-api/elmsln-course' => $course,
+      'https://www.elmsln.org/x-api/elmsln-url-title' => $title,
+      'https://www.elmsln.org/x-api/elmsln-url' => $url,
+      'https://www.elmsln.org/x-api/elmsln-role' => $role,
+      'https://www.elmsln.org/x-api/elmsln-session' => $session,
+    );
+    // beacon if its set
+    if (isset($_GET['xapibeacon']) && !empty($_GET['xapibeacon'])) {
+      $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-beacon'] = filter_xss($_GET['xapibeacon']);
+    }
+    // see if we can find a field related to competencies
+    if ($node = menu_get_object()) {
+      if (isset($node->field_elmsln_competency) && !empty($node->field_elmsln_competency)) {
+        $data['context']['extensions']['https://www.elmsln.org/x-api/elmsln-course-competency'] = $node->field_elmsln_competency['und'][0]['safe_value'];
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_tincan_request_fuction().
+ */
+function elmsln_core_tincan_request_fuction() {
+  return array('elmsln_core_tincanapi_send' => t('elmsln (nonblocking option)'));
+}
+
+/**
+ * Send the data collection to the LRS; forked from core send method
+ *
+ * @param string $action
+ *   The name of the action to submit.
+ * @param string $method
+ *   The HTTP method.
+ * @param array $data
+ *
+ * @see  tincanapi_send
+ *   An associative array that conforms to the API specification.
+ */
+function elmsln_core_tincanapi_send($action, $method, array $data) {
+  // ensure registry is correct
+  if ($settings = _cis_connector_build_registry(ELMSLN_CORE_LRS_KEYCHAIN)) {
+    // options
+    $options = array(
+      'method' => $method,
+      'headers' => array(
+        'Content-Type' => 'application/json',
+        'X-Experience-API-Version' => '1.0.0',
+      ),
+    );
+    if ($method == "POST" || $method == "PUT") {
+      $json = json_encode($data);
+      $options['data'] = json_encode($data);
+      $options['headers']['Content-Length'] = strlen($json);
+      // all this work so we can use non-blocking calls!
+      $options['blocking'] = FALSE;
+    }
+    $end_point = variable_get('tincanapi_endpoint');
+    // same as above, you could ignore / override / swap out buckets to use for
+    // connecting. This opens the door for multiple dedicated LRSs based on the type
+    // of data they have or doing an LRS migration contextually down the road
+    $bucket = variable_get('elmsln_lrs_bucket', ELMSLN_CORE_LRS_KEYCHAIN);
+    // build the call to make which will go against the lrs bucket
+    // Sanitize endpoint.
+    $end_point = trim($end_point);
+    // split off protocol
+    $tmp = explode('://', $end_point);
+    $end_point = $tmp[1];
+    // split domain off from path for the request
+    $tmp = explode('/', $end_point);
+    array_shift($tmp);
+    $end_point = implode('/', $tmp);
+    if (substr($end_point, -1) == "/") {
+      $end_point = substr($end_point, 0, -1);
+    }
+    // Sanitize action.
+    $action = trim($action);
+    if (substr($end_point, 0, 1) == "/") {
+      $action = substr($end_point, 1);
+    }
+
+    if ($method == "GET" || $method == "DELETE") {
+      $action .= "?" . http_build_query($data, '', '&');
+    }
+
+    // Init call.
+    $call = $end_point . '/' . $action;
+    // generate the well structured request
+    $response = _cis_connector_request($call, $options, $bucket, FALSE);
+    // Check for connection errors.
+    if ($response === FALSE || $response === NULL) {
+      if (variable_get('tincanapi_watchdog') && $response['options']['blocking']) {
+        watchdog('tincanapi', curl_error($ch), array(), WATCHDOG_DEBUG);
+      }
+
+      return FALSE;
+    }
+
+    $response = json_decode($response->data, TRUE);
+    $error = isset($response["error"]) && $response["error"];
+
+    // Log the response.
+    if ((variable_get('tincanapi_watchdog') || $error) && $response['options']['blocking']) {
+      $debug = array(
+        "request" => array(
+          "url" => $end_point,
+          "post" => $data,
+        ),
+        "response" => array(
+          "txt" => $response,
+        ),
+      );
+
+      $severity = $error ? WATCHDOG_ERROR : WATCHDOG_DEBUG;
+      watchdog('tincanapi', json_encode($debug), array(), $severity);
+    }
+    return $response;
+  }
+  else {
+    return tincanapi_send($action, $method, $data);
+  }
+}
+
+/**
+ * Return the correct key from the given profile or
+ * active profile if none supplied. Typically this is
+ * just the name of the profile BUT it helps support
+ * versioned profile name spaces in the same space like
+ * cle__2 and cle existing side by side yet loading
+ * the same series of internal settings.
+ *
+ * @return string key related to this distribution
+ */
+function elmsln_core_get_profile_key($profile = null) {
+  if (empty($profile)) {
+    $profile = variable_get('install_profile', 'standard');
+  }
+  // support for alternate version profiles
+  if (strpos($profile, '__')) {
+    $tmp = explode('__', $profile);
+    $profile = array_shift($tmp);
+  }
+  return $profile;
+}
+
+/**
+ * Assemble listing of paths to apply content wrappers.
+ * @return array   array of paths that should / shouldn't be wrapped
+ */
+function _elmsln_core_get_wrapped_paths() {
+  $patterns = &drupal_static(__FUNCTION__);
+  if (!isset($patterns)) {
+    $paths = module_invoke_all('wrapped_paths');
+    drupal_alter('wrapped_paths', $paths);
+    // Combine all wrapped paths into one array, and likewise for non-wrapped paths,
+    // for easier handling.
+    $patterns = array();
+    $patterns['wrapped'] = array();
+    $patterns['non_wrapped'] = array();
+    foreach ($paths as $path => $enabled) {
+      if ($enabled) {
+        $patterns['wrapped'][] = $path;
+      }
+      else {
+        $patterns['non_wrapped'][] = $path;
+      }
+    }
+    $patterns['wrapped'] = implode("\n", $patterns['wrapped']);
+    $patterns['non_wrapped'] = implode("\n", $patterns['non_wrapped']);
+  }
+  return $patterns;
+}
+
+/**
+ * See if current path should have content wrappers.
+ * @param  string $path drupal relative path like user/5
+ * @return boolean       if the path should have content wrappers applied or not.
+ */
+function _elmsln_core_path_is_wrapped($path) {
+  $path_map = &drupal_static(__FUNCTION__);
+  if (!isset($path_map['wrapped'][$path])) {
+    $patterns = _elmsln_core_get_wrapped_paths();
+    $path_map['wrapped'][$path] = drupal_match_path($path, $patterns['wrapped']);
+    $path_map['non_wrapped'][$path] = drupal_match_path($path, $patterns['non_wrapped']);
+  }
+  return $path_map['wrapped'][$path] && !$path_map['non_wrapped'][$path];
+}
+
+/**
+ * Implements hook_wrapped_paths().
+ */
+function elmsln_core_wrapped_paths() {
+  $paths = array(
+    // wrap everything for now
+    '*' => TRUE,
+    // user pages are full width
+    'user/*' => FALSE,
+    'user/*/*' => FALSE,
+  );
+  return $paths;
+}
+
+/**
+ * Implements hook_webcomponents_base_path_alter().
+ */
+function elmsln_core_webcomponents_base_path_alter(&$path) {
+  // see if we can hit one of our own paths to serve from
+  // ELMS:LN administrators can hijack this if needed but we are now
+  // defaulting to all domains serving via elmsmedia since it already
+  // should be configured to allow for javascript and other remote connectivity
+  $tool = variable_get('elmsln_webcomponents_cdn_tool', 'elmsmedia');
+  if ($tool && $settings = _cis_connector_build_registry($tool)) {
+    $path = _cis_connector_format_address($settings, '/', 'front');
+  }
+}
+
+/**
+ * Implements hook_register_webcomponent_apps_alter().
+ */
+function elmsln_core_register_webcomponent_apps_alter(&$apps) {
+  // kill things not for our app
+  foreach ($apps as $key => $app) {
+    // make sure we have a context to mess with
+    if (isset($app['context']['distro']) && $app['context']['distro'] != elmsln_core_get_profile_key()) {
+      unset($apps[$key]);
+    }
+  }
+}
+
+/**
+ * Implements hook_webcomponent_render_alter().
+ */
+function elmsln_core_webcomponent_render_alter(&$vars, $app) {
+  // verify this is an app since this runs on other renders
+  if (is_array($app) && isset($app['is_app']) && $app['is_app']) {
+    $vars['properties']['elmsln-course'] = _cis_connector_course_context();
+    $vars['properties']['elmsln-section'] = _cis_connector_section_context();
+  }
+  else if(isset($app->is_app) && $app->is_app) {
+    $vars['properties']['elmsln-course'] = _cis_connector_course_context();
+    $vars['properties']['elmsln-section'] = _cis_connector_section_context();
+  }
+}
+
+/**
+ * Implements hook_cis_lmsless_color_alter().
+ */
+function elmsln_core_cis_lmsless_color_alter(&$map) {
+  if ($registry = _cis_connector_build_registry()) {
+    foreach ($registry as $distro => $settings) {
+      $map[$distro] = array(
+        'dark'   => (isset($settings['color_dark']) ? $settings['color_dark'] : $map['_default_']['dark']),
+        'light'  => (isset($settings['color_light']) ? $settings['color_light'] : $map['_default_']['light']),
+        'color' => (isset($settings['color']) ? $settings['color'] : $map['_default_']['color']),
+        'text' => (isset($settings['color_text']) ? $settings['color_text'] : $map['_default_']['text']),
+        'outline' => (isset($settings['color_outline']) ? $settings['color_outline'] : $map['_default_']['outline']),
+        'code' => (isset($settings['color_code']) ? $settings['color_code'] : $map['_default_']['code']),
+        'color_code_dark' => (isset($settings['color_code_dark']) ? $settings['color_code_dark'] : $map['_default_']['color_code_dark']),
+        'code_text' => (isset($settings['color_code_text']) ? $settings['color_code_text'] : $map['_default_']['code_text']),
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_webcomponents_cmstags_schema().
+ */
+function elmsln_core_webcomponents_cmstags_schema($params, $type) {
+  if ($type == 'token') {
+    // try to pull ciscode out of it
+    $code = array();
+    $tmp = preg_replace("/\[(\s)*ciscode(\s)*(\||\])/", "", $params['token']);
+    $tmp = str_replace("]", "", $tmp);
+    $args = preg_split("/\|/", $tmp);
+    // For the current match, process each parameter.
+    foreach ($args as $fvar) {
+      $key_val = preg_split("/=/", $fvar, 2);
+      if ($key_val[0] != "") {
+        $code[trim($key_val[0])] = trim($key_val[1]);
+      }
+    }
+    // only request display modes for thing that are in the media system
+    if ($code['tool'] == 'elmsmedia') {
+      // sync the service but do it non-blocking
+      $request = array(
+        'method' => 'POST',
+        'api' => '1',
+        'bucket' => 'elmsmedia',
+        'path' => '/',
+        'data' => array(
+          'elmsln_module' => 'elmsmedia_helper',
+          'elmsln_callback' => 'elmsmedia_display_modes',
+          'nid' => $code['item'],
+        ),
+      );
+      $response = _elmsln_api_request($request);
+      $data = drupal_json_decode($response);
+      $slot = '';
+      // ensure we have display modes in response
+      if (isset($data['display_modes'])) {
+        // options as pulled across from the media system per node type
+        foreach ($data['display_modes'] as $key => $value) {
+          $slot .= '<paper-item value="' . $key . '">' . ucfirst(str_replace('_', ' ', $value)) . '</paper-item>';
+        }
+        // return json schema back to the front end, woah
+        return array(
+          '_displayMode' => array(
+            'response' => $data,
+            'request' => $request,
+            'type' => 'string',
+            'value' => $code['display_mode'],
+            'title' => t('Display mode'),
+            'component' => array(
+              'name' => 'dropdown-select',
+              'valueProperty' => 'value',
+              'slot' => $slot,
+              'properties' => array(
+                'value' => $code['display_mode'],
+              ),
+            ),
+          )
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_webcomponents_cmstags_editendpoint_alter().
+ */
+function elmsln_core_webcomponents_cmstags_editendpoint_alter(&$url, &$params, $type) {
+  // build out the correct end point based on getting a cis_connector cached response
+  if ($type == 'token') {
+    // try to pull ciscode out of it
+    $code = array();
+    $tmp = preg_replace("/\[(\s)*ciscode(\s)*(\||\])/", "", $params['token']);
+    $tmp = str_replace("]", "", $tmp);
+    $args = preg_split("/\|/", $tmp);
+    // For the current match, process each parameter.
+    foreach ($args as $fvar) {
+      $key_val = preg_split("/=/", $fvar, 2);
+      if ($key_val[0] != "") {
+        $code[trim($key_val[0])] = trim($key_val[1]);
+      }
+    }
+    
+    // if we have a tool, this can be assumed to be a remote render item
+    if (isset($code['tool'])) {
+      $url = base_path() . 'elmsln/redirect/' . $code['tool'] . '/' . $code['entity_type'] . '/' . $code['item'] . '/edit?entity_iframe=1';
+    }
+    // if we're told NOT to send a cached response then we should frag this cache entry
+    // this callback happens JUST before rendering out content just for this possibility :)
+    if (isset($params['cachedResponse']) && $params['cachedResponse'] == 'false') {
+      cache_clear_all('elmsln:' . $code['tool'] . ':' . $code['entity_type'] . ':' . $code['item'] . ':', 'cache_cis_connector', TRUE);
+    }
+  }
+}
+
+/**
+ * Implements hook_gbm_book_root_path_alter().
+ */
+function elmsln_core_gbm_book_root_path_alter(&$path) {
+  // make sure heavily cached markdown paths don't accidentally
+  // have the service url in them
+  $cfg = _elmsln_core_get_cfg();
+  $path = str_replace($cfg['dataprotocol'] . '://' . $cfg['serviceprefix'], $cfg['protocol'] . '://', $path);
+}
+
+/**
+ * Return a form of the user's name based on possible fields
+ * @var $priority string  The piece of info to try and return
+ * @var $uid  int  Account to render or active if empty
+ * @return        string  a representation of the user's name
+ */
+function _elmsln_core_get_user_name($priority = 'full', $uid = NULL) {
+  // user global if nothing there
+  if (is_null($uid)) {
+    $account = $GLOBALS['user'];
+  }
+  // account for getting a uid
+  else {
+    $account = user_load($uid);
+  }
+  // edge case, deserialize array; we want this as an array no matter what
+  if (is_string($account->data)) {
+    $account->data = unserialize($account->data);
+  }
+  else if (is_bool($account->data)) {
+    $account->data = array();
+  }
+  else if (!isset($account->data)) {
+    $account->data = array();
+  }
+  switch ($priority) {
+    case 'first':
+      // try for the sis data first
+      if (isset($account->data['sis'])) {
+        if (isset($account->data['sis']['first'])) {
+          return $account->data['sis']['first'];
+        }
+      }
+    break;
+    case 'last':
+      // try for the sis data first
+      if (isset($account->data['sis'])) {
+        if (isset($account->data['sis']['last'])) {
+          return $account->data['sis']['last'];
+        }
+      }
+    break;
+    case 'full':
+      // try for the sis data first
+      if (isset($account->data['sis'])) {
+        if (isset($account->data['sis']['full'])) {
+          return $account->data['sis']['full'];
+        }
+        else if (isset($account->data['sis']['name'])) {
+          return $account->data['sis']['name'];
+        }
+        else if (isset($account->data['sis']['sortable'])) {
+          return $account->data['sis']['sortable'];
+        }
+      }
+    break;
+  }
+  return $account->name;
+}
+
+/**
+ * Return a form of the user's picture.
+ * @var $style    string  The piece of info to try and return
+ * @var $uid      int     Account to render or active if empty
+ * @return        string  a representation of the user's name
+ */
+function _elmsln_core_get_user_picture($style = 'avatar', $uid = NULL) {
+  $picture = FALSE;
+  // user global if nothing there
+  if (is_null($uid)) {
+    $account = $GLOBALS['user'];
+  }
+  // account for getting a uid
+  else {
+    $account = user_load($uid);
+  }
+  $sis = _elmsln_core_get_sis_user_data($uid);
+  switch ($style) {
+    case 'avatar':
+    default:
+      // try for the sis data first
+      if (!is_null($sis) && isset($sis['avatar_url'])) {
+        $picture = $sis['avatar_url'];
+      }
+      else {
+        // fallback, a globgal profile value from CPR
+        $elmsln_global_profile = variable_get('elmsln_global_profile', 'cpr');
+        $uri = 'elmslnauthority://' . $elmsln_global_profile . '/users/photos/' . $account->name .'.jpg';
+        if (file_exists(_elmsln_core_realpath($uri))) {
+          $picture = file_create_url($uri);
+          $picture = str_replace('files/users', 'files/styles/foundation_access_lmsless_bar/public/users', $image);
+        }
+      }
+    break;
+  }
+  // allow people to override this
+  drupal_alter('elmsln_core_user_picture', $picture, $style, $account);
+  return $picture;
+}
+
+/**
+ * Load some user extra info useful for representing the user visually.
+ */
+function _elmsln_core_get_user_extras($uid = NULL) {
+  // resolve a user account
+  if (!is_null($uid)) {
+    $account = user_load($uid);
+  }
+  else {
+    global $user;
+    $account = $user;
+  }
+  if (_cis_connector_role_grouping('teacher', $account)) {
+    return array(
+      'icon' => 'social:school',
+      'label' => t('Instructor'),
+    );
+  }
+  else if (_cis_connector_role_grouping('staff', $account)) {
+    return array(
+      'icon' => 'stars',
+      'label' => t('Staff'),
+    );
+  }
+  else {
+    return array(
+      'icon' => FALSE,
+      'label' => FALSE,
+    );
+  }
+}
+
+/**
+ * Return a form of the user's sis information.
+ * @var     $uid  int     Account to render or active if empty
+ * @return        object  user's sis data if it exists
+ */
+function _elmsln_core_get_sis_user_data($uid = NULL) {
+  $sis = NULL;
+  // user global if nothing there
+  if (is_null($uid)) {
+    $account = $GLOBALS['user'];
+  }
+  // account for getting a uid
+  else {
+    $account = user_load($uid);
+  }
+  // edge case, deserialize array; we want this as an array no matter what
+  if (is_string($account->data)) {
+    $account->data = unserialize($account->data);
+  }
+  else if (is_bool($account->data)) {
+    $account->data = array();
+  }
+  else if (!isset($account->data)) {
+    $account->data = array();
+  }
+  if (isset($account->data['sis'])) {
+    $sis = $account->data['sis'];
+  }
+  else {
+    $sis = array(
+      'sortable_name' => $account->name,
+      'name' => $account->name,
+    );
+  }
+  return $sis;
+}
+
+/**
+ * Implements hook_hax_cms_hax_attributes_alter().
+ */
+function elmsln_core_hax_cms_hax_attributes_alter(&$attributes) {
+  // hide panel operations, ELMS handles saving in HAX
+  unset($attributes['hide-panel-ops']);
+}
+
+/**
+ * Implements hook_webcomponents_cmstagsprocess_alter().
+ */
+function elmsln_core_webcomponents_cmstagsprocess_alter(&$process, &$token) {
+  // skip elmsln specific tokens
+  if (strpos($token, 'elmsln_') === 0) {
+    $process = FALSE;
+  }
+}
+/**
+ * Implements hook_tokens_alter().
+ */
+function elmsln_core_tokens_alter(&$replacements, $context) {
+  // check for hax loading the content and ensure we gut the elmsln_ tokens
+  if (arg(2) == 'hax') {
+    foreach ($replacements as $token => $value) {
+      if (strpos($token, '[elmsln_') === 0) {
+        $replacements[$token] = $token;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_hax_app_store().
+ */
+function elmsln_core_hax_app_store() {
+  //global $base_url;
+  /*$parts = explode('://', $base_url);
+  // built in support when file_entity and restws is in place
+  $json = '{
+    "details": {
+      "title": "' . t('ELMSMedia') . '",
+      "icon": "perm-media",
+      "color": "green",
+      "author": "ELMSLN",
+      "description": "ELMS:LN media integration for HAX",
+      "tags": ["media", "elmsln"]
+    },
+    "connection": {
+      "protocol": "' . $parts[0] . '",
+      "url": "' . $parts[1] . '",
+      "operations": {
+        "browse": {
+          "method": "GET",
+          "endPoint": "file.json",
+          "pagination": {
+            "style": "link",
+            "props": {
+              "first": "page.first",
+              "next": "page.next",
+              "previous": "page.previous",
+              "last": "page.last"
+            }
+          },
+          "search": {
+          },
+          "data": {
+          },
+          "resultMap": {
+            "defaultGizmoType": "image",
+            "items": "list",
+            "preview": {
+              "title": "name",
+              "details": "mime",
+              "image": "url",
+              "id": "uuid"
+            },
+            "gizmo": {
+              "source": "url",
+              "id": "uuid",
+              "title": "name",
+              "type": "type"
+            }
+          }
+        },
+        "add": {
+          "method": "POST",
+          "endPoint": "elmsmedia-file-save/' . drupal_get_token('elmsln') . '",
+          "acceptsGizmoTypes": [
+            "image",
+            "video",
+            "audio",
+            "pdf",
+            "svg",
+            "document",
+            "csv"
+          ],
+          "resultMap": {
+            "item": "data.file",
+            "defaultGizmoType": "image",
+            "gizmo": {
+              "source": "url",
+              "id": "uuid",
+              "title": "filename",
+              "type": "type"
+            }
+          }
+        }
+      }
+    }
+}';*/
+ // return json_decode($json);
+}
+
+/**
+ * Implements hook_hax_stax().
+ */
+function elmsln_core_hax_stax() {
+  $json = '[
+    {
+      "details": {
+        "title": "Topic page",
+        "author": "ELMS:LN",
+        "description": "A well made topic page",
+        "status": "available",
+        "rating": "0",
+        "tags": ["instructional design", "list"]
+      },
+      "stax": [
+        {
+          "tag": "h2",
+          "properties": {},
+          "content": "Step 1: Complete the Topic Readings"
+        },
+        {
+          "tag": "p",
+          "properties": {},
+          "content": "This topic uses one or more required readings and one or more optional readings. By completing these readings before studying the lecture, you will make the most effective use of both. As you read, remember to take good notes using your study sheets."
+        },
+        {
+          "tag": "div",
+          "properties": {
+            "class": "textbook_box textbook_box_required"
+          },
+          "content": "<h3>Required</h3><ol><li><a href=\"https://wikipedia.org/\" target=\"_blank\">The encyclopedia of the internet</a></li></ol>"
+        },
+        {
+          "tag": "div",
+          "properties": {
+            "class": "textbook_box textbook_box_optional"
+          },
+          "content": "<h3>Optional</h3><ol><li><a href=\"https://wikipedia.org/\" target=\"_blank\">The encyclopedia of the internet</a></li></ol>"
+        },
+        {
+          "tag": "h2",
+          "properties": {},
+          "content": "Step 2: Topic activity"
+        },
+        {
+          "tag": "p",
+          "properties": {},
+          "content": "Go to your documents area and complete the activity."
+        },
+        {
+          "tag": "h2",
+          "properties": {},
+          "content": "Step 3: Take Notes on the Lecture"
+        },
+        {
+          "tag": "p",
+          "properties": {},
+          "content": "Watch the following lecture and take notes using your study sheets."
+        },
+        {
+          "tag": "place-holder",
+          "properties": {
+            "type": "video"
+          },
+          "content": ""
+        }
+      ]
+    }
+  ]';
+  return json_decode($json);
+}
+
+/**
+ * Save the file to the media system
+ */
+function _elmsmedia_file_save($token) {
+  $status = 403;
+  // check for the uploaded file from our 1-page-uploader app
+  // and ensure there are entity permissions to create a file of this type
+  if (drupal_valid_token($token, 'elmsln') && isset($_FILES['file-upload'])) {
+    $upload = $_FILES['file-upload'];
+    // check for a file upload
+    if (isset($upload['tmp_name']) && is_uploaded_file($upload['tmp_name'])) {
+      $upload['type'] = explode('/', $upload['type']);
+      if ($upload['type'][0] == 'application') {
+        $upload['type'][0] = 'document';
+      }
+      // get contents of the file if it was uploaded into a variable
+      if ($upload['type'][0] == 'video' || $upload['type'][0] == 'audio') {
+        $data = $upload['tmp_name'];
+      }
+      else {
+        $data = file_get_contents($upload['tmp_name']);
+        $data = base64_encode($data);
+      }
+      // post against elmsmedia
+      $request = array(
+        'bucket' => 'elmsmedia',
+        'path' => '/',
+        'method' => 'POST',
+        'api' => 1,
+        'data' => array(
+          'elmsln_module' => 'elmsmedia_helper',
+          'elmsln_callback' => 'elmsmedia_upload',
+          '__course_context' => _cis_connector_course_context(),
+          'upload' => $upload,
+          'file_data' => $data,
+          'user' => $GLOBALS['user']->name,
+          'file_wrapper' => 'public',
+        ),
+      );
+      $return = _elmsln_api_request($request);
+      // decode the response since it's double encoded json
+      $return = json_decode($return);
+      // look for a response code and set it as status if we find one
+      if (isset($return->response->code)) {
+        $status = $return->response->code;
+      }
+    }
+  }
+  // send back happy headers
+  drupal_add_http_header('Content-Type', 'application/json');
+  // define status
+  drupal_add_http_header('Status', $status);
+  $return = array(
+    'status' => $status,
+    'message' => t('Upload successful!'),
+    'data' => $return,
+  );
+  // output the response as json
+  print drupal_json_output($return);
+  exit;
+}

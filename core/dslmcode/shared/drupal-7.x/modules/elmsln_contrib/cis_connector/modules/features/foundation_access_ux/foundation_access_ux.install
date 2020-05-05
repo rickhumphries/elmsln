@@ -1,0 +1,76 @@
+<?php
+
+/**
+ * @file
+ * Foundation Access install.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function foundation_access_ux_install() {
+  // placeholder
+}
+
+/**
+ * Placeholder to trigger the 7001 update having to be applied
+ */
+function foundation_access_ux_update_7000(&$sandbox) {
+  // placeholder
+}
+
+
+/**
+ * Massive menu refactor under the hood to simplify development
+ * across the distributions by standardizing on three menus
+ * that all use the same name. This consolidates 15 or so menus
+ * down into 3 for a sense of the scope of this.
+ */
+function foundation_access_ux_update_7001(&$sandbox) {
+  // self revert so those blocks get in position
+  features_revert_module('foundation_access_ux');
+  // revert CIS UX feature for menu link placement
+  // revert all the distributions that have known menu links
+  // that we need to ensure are aware of these new menu locations
+  // cis 2.x; 1.x doesn't run this module
+  $modules = array(
+    'cis_ux' => array('menu_links'),
+    'elmsmedia_cis_ux' => array('menu_links'),
+    'ecd_ux' => array('menu_links'),
+    'icor_ux' => array('menu_links'),
+    'cle_cis_ux' => array('menu_links'),
+  );
+  features_revert($modules);
+  // kill menu caches associated with these so they all show up
+  menu_cache_clear('menu-elmsln-navigation');
+  menu_cache_clear('menu-elmsln-add');
+  menu_cache_clear('menu-elmsln-settings');
+}
+
+/**
+ * Navigation menu split out into 3 potential levels of navigation
+ * based on hierarchy of the items. each only spit onto its own level
+ */
+function foundation_access_ux_update_7002(&$sandbox) {
+  // revert to get the new block placements
+  $modules = array(
+    'foundation_access_ux' => array('context'),
+  );
+  features_revert($modules);
+  // kill menu caches associated with this so the new items show up
+  menu_cache_clear('menu-elmsln-navigation');
+}
+
+/**
+ * Switch to materialize for textbook tweaks.
+ */
+function foundation_access_ux_update_7003(&$sandbox) {
+  features_revert_module('foundation_access_ux');
+}
+
+/**
+ * Tab / DOM stack order for Add menu FAB.
+ */
+function foundation_access_ux_update_7004(&$sandbox) {
+  features_revert_module('foundation_access_ux');
+}

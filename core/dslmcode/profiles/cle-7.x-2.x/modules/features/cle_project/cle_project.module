@@ -1,0 +1,229 @@
+<?php
+/**
+ * @file
+ * Code for the CLE Project feature.
+ */
+
+include_once 'cle_project.features.inc';
+
+/**
+ * Implements hook_menu().
+ */
+function cle_project_menu() {
+  $items = array();
+  $items['api/v1/cle/projects'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('project', NULL, NULL),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/projects/create'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('project', NULL, 4),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/projects/fields'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('project', NULL, 4),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/projects/%'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('project', 4, 'query'),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/projects/%/fields'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('project', 4, 5),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/projects/%/update'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('project', 4, 'update'),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  $items['api/v1/cle/projects/%/delete'] = array(
+    'page callback' => '_elmsln_api_v1_page_callback',
+    'page arguments' => array('project', 4, 'delete'),
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_elmsln_jsapi_info().
+ */
+function cle_project_elmsln_jsapi_info() {
+  // assignment api router
+  $items['project'] = array(
+    'type'   => 'node',
+    'bundle' => 'cle_project',
+    'modify' => '_cle_project_v1_project_modify',
+    'list'   => '_cle_project_v1_get_projects',
+    'output' => '_cle_project_v1_project_output',
+  );
+  return $items;
+}
+
+/**
+ * @todo
+ * Get all of the projects for the current user
+ * - Make sure that they are seeing projects for their current section
+ */
+function _cle_project_v1_get_projects($type, $filter = array()) {
+  $items = array();
+  $orderby = array();
+  $section_id = _cis_connector_section_context();
+  $section = _cis_section_load_section_by_id($section_id);
+  $field_conditions = array(
+    'og_group_ref' => array('target_id', $section, '='),
+  );
+  $property_conditions = array('status' => array(NODE_PUBLISHED, '='));
+  if (isset($filter['project'])) {
+    $property_conditions['nid'] = array($filter['project'], '=');
+  }
+  $orderby = array();
+  $items = _cis_connector_assemble_entity_list('node', 'cle_project', 'nid', '_entity', $field_conditions, $property_conditions, $orderby);
+  return $items;
+}
+
+/**
+ * Helper function that prepares a submission for api output.
+ */
+function _cle_project_v1_project_output($node) {
+  global $base_url;
+  $account = $GLOBALS['user'];
+  // check for section specific projects
+  $sections = _elmsln_api_multifield_clean($node, 'og_group_ref', 'target_id', TRUE);
+  // check for steps
+  $steps = _elmsln_api_multifield_clean($node, 'field_project_steps', 'target_id', TRUE);
+  // set color
+  $color = '#ffffff';
+  if (isset($node->field_project_color[LANGUAGE_NONE][0]['jquery_colorpicker'])) {
+    $color = '#' . $node->field_project_color[LANGUAGE_NONE][0]['jquery_colorpicker'];
+  }
+  // calculate metadata to act on this
+  $metadata = array(
+    'canUpdate' => 0,
+    'canDelete' => 0,
+  );
+  // see the operations they can perform here
+  if (entity_access('update', 'node', $node, $account)) {
+    $metadata['canUpdate'] = 1;
+  }
+  if (entity_access('delete', 'node', $node, $account)) {
+    $metadata['canDelete'] = 1;
+  }
+  // this will be our json formatted output
+  $return = array(
+    'id' => (int)$node->nid,
+    'uuid' => $node->uuid,
+    'uid' => (int)$node->uid,
+    'title' => $node->title,
+    'status' => (int)$node->status,
+    'created' => Date('c', $node->created),
+    'sections' => $sections,
+    'body' => $node->field_project_description[LANGUAGE_NONE][0]['safe_value'],
+    'dueDate' => _elmsln_api_format_date_field($node->field_project_due_date[LANGUAGE_NONE][0]),
+    'allowLateSubmissions' => (int)$node->field_assignment_late_submission[LANGUAGE_NONE][0]['value'],
+    'color' => $color,
+    'image' => _elmsln_api_v1_file_output($node->field_project_image[LANGUAGE_NONE][0]),
+    'hierarchy' => array(
+      'stepsToComplete' => $steps,
+      'parentProject' => (int)$node->field_project_parent[LANGUAGE_NONE][0]['target_id'],
+    ),
+    'links' => array(
+      'self' => $base_url . '/api/v1/cle/projects/' . $node->nid,
+    ),
+    'metadata' => $metadata,
+  );
+  return $return;
+}
+
+/**
+ * ELMSLN JSapi callback for creating an assignment.
+ * @todo  make this use the full POST data sanitized and in params.
+ */
+function _cle_project_v1_project_modify($node, $params = NULL) {
+  if (!isset($node->nid)) {
+    $detail = t('Project created');
+  }
+  else {
+    $detail = t('Project updated');
+  }
+  // loop through supported parameters and set them for create or update
+  foreach ($params as $key => $value) {
+    // fields we support in a POST
+    switch ($key) {
+      case 'uid':
+      case 'uuid':
+      case 'title':
+      case 'status':
+        $node->{$key} = $value;
+      break;
+      // we support multiple sections for projects
+      case 'sections':
+        $node->og_group_ref[LANGUAGE_NONE] = array();
+        foreach ($value as $section) {
+          if (!is_null($section)) {
+            $node->og_group_ref[LANGUAGE_NONE][] = array('target_id' => $section);
+          }
+        }
+      break;
+      case 'body':
+        $node->field_project_description[LANGUAGE_NONE][0] = $value;
+      break;
+      case 'dueDate':
+        $node->field_project_due_date[LANGUAGE_NONE][0]['value1'] = $value;
+      break;
+      case 'allowLateSubmissions':
+        $node->field_assignment_late_submission[LANGUAGE_NONE][0]['value'] = $value;
+      break;
+      case 'color':
+        $node->field_project_color[LANGUAGE_NONE][0]['jquery_colorpicker'] = $value;
+      break;
+      case 'image':
+        if (!is_null($value)) {
+          $node->field_project_image[LANGUAGE_NONE][0]['target_id'] = $value;
+        }
+      break;
+      case 'hierarchy':
+        foreach ($value as $key2 => $value2) {
+          switch ($key2) {
+            case 'stepsToComplete':
+              $node->field_project_steps[LANGUAGE_NONE] = array();
+              foreach ($value2 as $item) {
+                if (!is_null($item)) {
+                  $node->field_project_steps[LANGUAGE_NONE][] = array('target_id' => $item);
+                }
+              }
+            break;
+            case 'parentProject':
+              if (!is_null($value2)) {
+                $node->field_project_parent[LANGUAGE_NONE][0]['target_id'] = $value2;
+              }
+            break;
+          }
+        }
+      break;
+    }
+  }
+  // ensure we don't have anonymous creation since it's not possible
+  if (!isset($node->uid) || $node->uid == 0) {
+    $node->uid = $GLOBALS['user']->uid;
+  }
+  node_save($node);
+  // output the newly created node
+  $vars = array(
+    'status' => '200',
+    'detail' => $detail,
+    'node' => (array) $node,
+  );
+  return $vars;
+}

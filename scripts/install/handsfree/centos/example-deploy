@@ -9,11 +9,12 @@
 # will work to give you a taste of what its about to do when your ready for
 # the real deal to be deployed somewhere.
 # get the epel and remi repo listings so we can get additional packages like mcrypt
-wget http://rpms.famillecollet.com/enterprise/remi-release-6.rpm
-rpm -Uvh remi-release-6*.rpm
+yes | yum -y install wget git
 wget http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
 rpm -Uvh epel-release-6*.rpm
-yes | yum -y install wget git && git clone https://github.com/elmsln/elmsln.git /var/www/elmsln && bash /var/www/elmsln/scripts/install/handsfree/centos/centos-install.sh elmsln ln elmsln.dev http admin@elmsln.dev yes
+wget http://rpms.famillecollet.com/enterprise/remi-release-6.rpm
+rpm -Uvh remi-release-6*.rpm
+git clone https://github.com/elmsln/elmsln.git /var/www/elmsln && bash /var/www/elmsln/scripts/install/handsfree/centos/centos-install.sh elmsln ln elmsln.dev http admin@elmsln.dev yes
 cd $HOME && source .bashrc
 
 # for production usage:
@@ -22,5 +23,5 @@ cd $HOME && source .bashrc
 # ln: 2 letter to represent organizational unit
 # elmsln.dev: domain to use as the base for the network
 # http: protocol; http or https for all communications
-# email@elmsln.dev: admin email address
+# admin@elmsln.dev: admin email address
 # yes: report to our anonymous analytics program when we start it yes/no

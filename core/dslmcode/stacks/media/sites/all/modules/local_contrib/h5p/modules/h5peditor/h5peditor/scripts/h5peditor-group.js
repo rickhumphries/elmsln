@@ -1,6 +1,4 @@
-var H5PEditor = H5PEditor || {};
-var ns = H5PEditor;
-
+/* global ns */
 /**
  * Create a group of fields.
  *
@@ -11,6 +9,9 @@ var ns = H5PEditor;
  * @returns {ns.Group}
  */
 ns.Group = function (parent, field, params, setValue) {
+  // Support for events
+  H5P.EventDispatcher.call(this);
+
   if (field.label === undefined) {
     field.label = field.name;
   }
@@ -46,12 +47,16 @@ ns.Group = function (parent, field, params, setValue) {
   }
 
   if (this.field.optional === true) {
-    // If this field is optional, make sure child fields are aswell
+    // If this field is optional, make sure child fields are as well
     for (var j = 0; j < this.field.fields.length; j++) {
       this.field.fields[j].optional = true;
     }
   }
 };
+
+// Extends the event dispatcher
+ns.Group.prototype = Object.create(H5P.EventDispatcher.prototype);
+ns.Group.prototype.constructor = ns.Group;
 
 /**
  * Append group to its wrapper.
@@ -70,23 +75,24 @@ ns.Group.prototype.appendTo = function ($wrapper) {
 
   // Add fieldset wrapper for group
   this.$group = ns.$('<fieldset/>', {
-    'class': 'field group',
+    'class': 'field group ' + H5PEditor.createImportance(this.field.importance) + ' field-name-' + this.field.name,
     appendTo: $wrapper
   });
 
   // Add title expand/collapse button
-  ns.$('<div/>', {
+  this.$title = ns.$('<div/>', {
     'class': 'title',
     title: ns.t('core', 'expandCollapse'),
     role: 'button',
     tabIndex: 0,
     on: {
-      click: function () {
-        that.expand();
+      click: function () {
+        that.toggle();
       },
-      keypress: function (event) {
+      keypress: function (event) {
         if ((event.charCode || event.keyCode) === 32) {
-          that.expand();
+          that.toggle();
+          event.preventDefault();
         }
       }
     },
@@ -94,52 +100,118 @@ ns.Group.prototype.appendTo = function ($wrapper) {
   });
 
   // Add content container
-  var $content = ns.$('<div/>', {
+  this.$content = ns.$('<div/>', {
     'class': 'content',
     appendTo: this.$group
   });
 
-  if (this.field.fields.length === 1) {
+  if (this.hasSingleChild() && !this.isSubContent()) {
+    this.$content.addClass('h5peditor-single');
     this.children = [];
     var field = this.field.fields[0];
     var widget = field.widget === undefined ? field.type : field.widget;
     this.children[0] = new ns.widgets[widget](this, field, this.params, function (field, value) {
       that.setValue(that.field, value);
     });
-    this.children[0].appendTo($content);
+    this.children[0].appendTo(this.$content);
   }
   else {
     if (this.params === undefined) {
       this.params = {};
       this.setValue(this.field, this.params);
     }
-    ns.processSemanticsChunk(this.field.fields, this.params, $content, this);
+
+    this.params = this.initSubContent(this.params);
+
+    ns.processSemanticsChunk(this.field.fields, this.params, this.$content, this);
   }
 
   // Set summary
   this.findSummary();
+
+  // Check if group should be expanded.
+  // Default is to be collapsed unless explicity defined in semantics by optional attribute expanded
+  if (this.field.expanded === true) {
+    this.expand();
+  }
+};
+
+/**
+ * Return whether this group is Sub Content
+ *
+ * @private
+ * @return {boolean}
+ */
+ns.Group.prototype.hasSingleChild = function () {
+  return this.field.fields.length === 1;
+};
+
+/**
+ * Add generated 'subContentId' attribute, if group is "sub content (library-like embedded structure)"
+ *
+ * @param {object} params
+ *
+ * @private
+ * @return {object}
+ */
+ns.Group.prototype.initSubContent = function (params) {
+  // If group contains library-like sub content that needs UUIDs
+  if (this.isSubContent()) {
+    params['subContentId'] = params['subContentId'] || H5P.createUUID();
+  }
+
+  return params;
+};
+
+/**
+ * Return whether this group is Sub Content
+ *
+ * @private
+ * @return {boolean}
+ */
+ns.Group.prototype.isSubContent = function () {
+  return this.field.isSubContent === true;
+};
+
+/**
+ * Toggle expand/collapse for the given group.
+ */
+ns.Group.prototype.toggle = function () {
+  if (this.preventToggle) {
+    this.preventToggle = false;
+    return;
+  }
+
+  if (this.$group.hasClass('expanded')) {
+    this.collapse();
+  }
+  else {
+    this.expand();
+  }
 };
 
 /**
  * Expand the given group.
  */
 ns.Group.prototype.expand = function () {
-  var expandedClass = 'expanded';
+  this.$group.addClass('expanded');
+  this.trigger('expanded');
+};
 
-  if (this.$group.hasClass(expandedClass)) {
-    // Do not collapse before valid!
-    var valid = true;
-    for (var i = 0; i < this.children.length; i++) {
-      if (this.children[i].validate() === false) {
-        valid = false;
-      }
-    }
-    if (valid) {
-      this.$group.removeClass(expandedClass);
+/**
+ * Collapse the given group (if valid)
+ */
+ns.Group.prototype.collapse = function () {
+  // Do not collapse before valid!
+  var valid = true;
+  for (var i = 0; i < this.children.length; i++) {
+    if (this.children[i].validate() === false) {
+      valid = false;
     }
   }
-  else {
-    this.$group.addClass(expandedClass);
+  if (valid) {
+    this.$group.removeClass('expanded');
+    this.trigger('collapsed');
   }
 };
 
@@ -154,16 +226,16 @@ ns.Group.prototype.findSummary = function () {
     if (child.field === undefined) {
       continue;
     }
-    var params = this.field.fields.length === 1 ? this.params : this.params[child.field.name];
+    var params = (that.hasSingleChild() && !that.isSubContent()) ? this.params : this.params[child.field.name];
     var widget = ns.getWidgetName(child.field);
 
-    if (widget === 'text') {
+    if (widget === 'text' || widget === 'html') {
       if (params !== undefined && params !== '') {
         summary = params.replace(/(<([^>]+)>)/ig, "");
       }
 
       child.$input.change(function () {
-        var params = that.field.fields.length === 1 ? that.params : that.params[child.field.name];
+        var params = (that.hasSingleChild() && !that.isSubContent()) ? that.params : that.params[child.field.name];
         if (params !== undefined && params !== '') {
           that.setSummary(params.replace(/(<([^>]+)>)/ig, ""));
         }
@@ -171,11 +243,39 @@ ns.Group.prototype.findSummary = function () {
       break;
     }
     else if (widget === 'library') {
-      if (params !== undefined) {
+      let lastLib;
+      if (child.params !== undefined) {
         summary = child.$select.children(':selected').text();
+        if (child.params.metadata && child.params.metadata.title) {
+          // The given title usually makes more sense than the type name
+          summary = child.params.metadata.title + (!child.libraries || (child.libraries.length > 1 && child.params.metadata.title.indexOf(summary) === -1) ? ' (' +  summary + ')' : '');
+        }
+        else if (!child.params.library) {
+          // Nothing selected
+          summary = that.field.label;
+        }
+      }
+      const setSummary = function () {
+        if (child.params && child.params.metadata && child.params.metadata.title) {
+          // The given title usually makes more sense than the type name
+          that.setSummary(child.params.metadata.title + (child.libraries.length > 1 && child.params.metadata.title.indexOf(lastLib.title) === -1 ? ' (' +  lastLib.title + ')' : ''));
+        }
+        else {
+          that.setSummary(lastLib ? lastLib.title : that.field.label);
+        }
+      };
+      if (child.metadataForm) {
+        child.metadataForm.on('titlechange', setSummary);
       }
       child.change(function (library) {
-        that.setSummary(library.title);
+        lastLib = library;
+        setSummary();
+
+        if (child.metadataForm) {
+          // Update summary when metadata title changes
+          child.metadataForm.off('titlechange', setSummary);
+          child.metadataForm.on('titlechange', setSummary);
+        }
       });
       break;
     }
@@ -190,14 +290,26 @@ ns.Group.prototype.findSummary = function () {
  * @returns {undefined}
  */
 ns.Group.prototype.setSummary = function (summary) {
-  if (summary !== undefined) {
-    summary = this.field.label + ': ' + (summary.length > 48 ? summary.substr(0, 45) + '...' : summary);
-  }
-  else {
-    summary = this.field.label;
+  var summaryText;
+
+  // Parse html
+  var summaryTextNode = ns.$.parseHTML(summary);
+
+  if (summaryTextNode !== null) {
+    summaryText = summaryTextNode[0].nodeValue;
   }
 
-  this.$group.children('.title').text(summary);
+  // Make it possible for parent to monitor summary changes
+  this.trigger('summary', summaryText);
+
+  if (summaryText !== undefined) {
+    summaryText = (summaryText.length > 48 ? summaryText.substr(0, 45) + '...' : summaryText);
+  }
+  else {
+    summaryText = this.field.label;
+  }
+
+  this.$title.text(summaryText);
 };
 
 /**
@@ -246,6 +358,25 @@ ns.Group.prototype.remove = function () {
   if (this.$group !== undefined) {
     ns.removeChildren(this.children);
     this.$group.remove();
+  }
+};
+
+/**
+ * Get a copy of the fields semantics used by this group.
+ * @return {Array}
+ */
+ns.Group.prototype.getFields = function () {
+  return H5PEditor.$.extend(true, [], this.field.fields);
+};
+
+/**
+ * When someone from the outside wants to set a value.
+ *
+ * @param {Object} value
+ */
+ns.Group.prototype.forceValue = function (value) {
+  for (let i = 0; i < this.children.length; i++) {
+    this.children[i].forceValue(value[this.children[i].field.name]);
   }
 };
 

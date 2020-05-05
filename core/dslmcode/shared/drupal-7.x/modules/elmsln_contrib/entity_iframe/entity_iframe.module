@@ -31,7 +31,7 @@ function entity_iframe_permission() {
 function entity_iframe_menu() {
   $items['entity_iframe/%/%'] = array(
     'page callback' => 'entity_iframe_output',
-    'page arguments' => array(1, 2),
+    'page arguments' => array(1, 2, 3),
     'access callback' => '_entity_iframe_view_iframe',
     'access arguments' => array(1, 2),
     'type' => MENU_CALLBACK,
@@ -170,6 +170,9 @@ function _entity_iframe_render_codes(&$entity, $type, $render = 'entity') {
         'frameborder' => '0',
         'class' => 'entity_iframe entity_iframe_' . $type,
         'id' => 'entity_iframe_' . $type . '_' . $entity->{$type_info['entity keys']['id']},
+        'allowfullscreen' => 'true',
+        'webkitallowfullscreen' => 'true',
+        'mozallowfullscreen' => 'true',
       );
       $field['entity_iframe']['entity_iframe_embed'] = array(
         '#title' => t('Code'),
@@ -178,6 +181,7 @@ function _entity_iframe_render_codes(&$entity, $type, $render = 'entity') {
         '#type' => 'textarea',
         '#rows' => 3,
         '#cols' => 1,
+        '#id' => 'entity-iframe-embed',
         '#pre_render' => array('_entity_iframe_embed_add_js'),
       );
     }
@@ -199,6 +203,7 @@ function _entity_iframe_render_codes(&$entity, $type, $render = 'entity') {
           '#title' => t('Direct iframe link'),
           '#value' => $base_url . '/' . $href,
           '#type' => 'textfield',
+          '#id' => 'entity-iframe-direct-link',
           '#attributes' => array('class' => array('entity_iframe_embed')),
         );
       }

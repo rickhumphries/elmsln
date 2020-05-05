@@ -16,8 +16,364 @@ function elmsmedia_install() {
   // standard clean up
   _elmsln_installer_post_install_cleanup();
   // front-page for media is the media path
-  variable_set('site_frontpage', 'media-overview');
-  // we don't need a help and syllabus link for most authority systems
+  variable_set('site_frontpage', 'elmsmedia');
+  // we don't need these on authority systems
   variable_set('cis_help_page', '');
+  variable_set('cis_resource_page', '');
   variable_set('cis_syllabus_page', '');
+  // we need to revert this at the end for whatever reason
+  features_revert_module('elmsmedia_cis_ux');
+}
+
+/**
+ * Revert UX to make the links show up
+ */
+function elmsmedia_update_7001(&$sandbox) {
+  features_revert_module('elmsmedia_cis_ux');
+}
+
+/**
+ * Enable clipboardjs so we can copy complex shortcodes from the
+ * display modes tab
+ */
+function elmsmedia_update_7002(&$sandbox) {
+  module_enable(array('clipboardjs'));
+}
+
+/**
+ * enable all our new features split off from the refactor
+ */
+function elmsmedia_update_7003(&$sandbox) {
+  module_enable(array(
+    'elmsmedia_audio',
+    'elmsmedia_document',
+    'elmsmedia_external_video',
+    'elmsmedia_figure_label',
+    'elmsmedia_h5p',
+    'elmsmedia_image',
+    'elmsmedia_perms',
+    'elmsmedia_svg',
+    'elmsmedia_video',
+    'elmsmedia_view_mode_tabs'
+  ));
+}
+
+/**
+ * Enable talking to the comply system but don't bulk send as
+ * people will need to do that manually if they desire.
+ */
+function elmsmedia_update_7004(&$sandbox) {
+  module_enable(array('elmsln_ecd'));
+}
+
+/**
+ * Enable tincan API / H5P bridge.
+ */
+function elmsmedia_update_7005(&$sandbox) {
+  module_enable(array('tincanapi', 'h5p_tincan_bridge', 'elmsmedia_section_perms'));
+}
+
+/**
+ * Switch video player from media element to ableplayer
+ * as well as fix an issue with display modes not showing
+ * and clean up the forms. This is a major step towards
+ * stabilization of the media system in capability and
+ * working out of the box with no configuration.
+ */
+function elmsmedia_update_7006(&$sandbox) {
+  module_disable(array('mediaelement'));
+  module_enable(array('modernizr', 'ableplayer'));
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_cis_ux');
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_feature');
+  features_revert_module('elmsmedia_figure_label');
+  features_revert_module('elmsmedia_h5p');
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_perms');
+  features_revert_module('elmsmedia_section_perms');
+  features_revert_module('elmsmedia_svg');
+  features_revert_module('elmsmedia_video');
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * Bring back the image caption and set the display mode tabs
+ * for all the content types that we have.
+ */
+function elmsmedia_update_7007(&$sandbox) {
+  module_enable(array('getid3', 'elmsmedia_image_gallery', 'bulk_photo_nodes', 'bpn_upload', 'plupload'));
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_figure_label');
+  features_revert_module('elmsmedia_h5p');
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_svg');
+  features_revert_module('elmsmedia_video');
+  features_revert_module('elmsmedia_view_mode_tabs');
+  features_revert_module('elmsmedia_cis_ux');
+  features_revert_module('elmsmedia_feature');
+  variable_set('site_frontpage', 'elmsmedia');
+}
+
+/**
+ * H5P special types visible.
+ */
+function elmsmedia_update_7008(&$sandbox) {
+  features_revert_module('elmsmedia_h5p');
+}
+
+/**
+ * Updates for accessible fallback methodology and related types
+ */
+function elmsmedia_update_7009(&$sandbox) {
+  module_enable(array('elmsmedia_static_content'));
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_figure_label');
+  features_revert_module('elmsmedia_h5p');
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_svg');
+  features_revert_module('elmsmedia_video');
+  features_revert_module('elmsmedia_view_mode_tabs');
+  features_revert_module('elmsmedia_cis_ux');
+  features_revert_module('elmsmedia_feature');
+}
+
+/**
+ * Fix for document view modes.
+ */
+function elmsmedia_update_7010(&$sandbox) {
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * Fix for image gallery view mode options
+ */
+function elmsmedia_update_7011(&$sandbox) {
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * Some fields and minor styling on input forms.
+ */
+function elmsmedia_update_7012(&$sandbox) {
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_figure_label');
+  features_revert_module('elmsmedia_h5p');
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_image_gallery');
+  features_revert_module('elmsmedia_static_content');
+  features_revert_module('elmsmedia_svg');
+  features_revert_module('elmsmedia_video');
+}
+
+/**
+ * Tincan API integration support.
+ */
+function elmsmedia_update_7013(&$sandbox) {
+  module_enable(array('elmsln_lrs'));
+}
+
+/**
+ * Support for course competency field everywhere.
+ */
+function elmsmedia_update_7014(&$sandbox) {
+  features_revert_module('elmsmedia_feature');
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_h5p');
+  features_revert_module('elmsmedia_svg');
+  features_revert_module('elmsmedia_video');
+}
+
+/**
+ * Support for multiple course selection for media content.
+ */
+function elmsmedia_update_7015(&$sandbox) {
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_feature');
+  features_revert_module('elmsmedia_image');
+}
+
+/**
+ * Support for embedding cis tokens into static content type.
+ */
+function elmsmedia_update_7016(&$sandbox) {
+  features_revert_module('elmsmedia_feature');
+}
+
+/**
+ * Fix permissions issue for staff members.
+ */
+function elmsmedia_update_7017(&$sandbox) {
+  features_revert_module('elmsmedia_perms');
+  features_revert_module('elmsmedia_section_perms');
+}
+
+/**
+ * Exposed view blocks for better UX.
+ */
+function elmsmedia_update_7018(&$sandbox) {
+  features_revert_module('elmsmedia_feature');
+}
+
+/**
+ * Section level role permissions established
+ */
+function elmsmedia_update_7019(&$sandbox) {
+  features_revert_module('elmsmedia_section_perms');
+}
+
+/**
+ * Esablish text format that's simple and enabled for image citation.
+ */
+function elmsmedia_update_7020(&$sandbox) {
+  module_enable(array('elmsln_simple_filter'));
+  features_revert_module('elmsmedia_image');
+}
+
+/**
+ * Some permissions clean up and brings in media list type.
+ */
+function elmsmedia_update_7021(&$sandbox) {
+  module_enable(array('elmsmedia_list'));
+  features_revert_module('elmsmedia_cis_ux');
+  features_revert_module('elmsmedia_feature');
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_perms');
+  features_revert_module('elmsmedia_section_perms');
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * If we don't set this manually then we'll get
+ * hand off issues with the file system on the data- domain
+ */
+function elmsmedia_update_7022(&$sandbox) {
+  $cfg = _elmsln_core_get_cfg();
+  variable_set('file_public_path', 'sites/media/' . $cfg['host'] . '/files');
+}
+
+/**
+ * SVG filter updated to allow gradients and citation fields added.
+ */
+function elmsmedia_update_7023(&$sandbox) {
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_image_gallery');
+  features_revert_module('elmsmedia_list');
+  features_revert_module('elmsmedia_svg');
+  features_revert_module('elmsmedia_video');
+}
+
+/**
+ * Data model simplification.
+ */
+function elmsmedia_update_7024(&$sandbox) {
+  features_revert_module('elmsmedia_audio');
+  features_revert_module('elmsmedia_document');
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_image_gallery');
+  features_revert_module('elmsmedia_list');
+  features_revert_module('elmsmedia_svg');
+  features_revert_module('elmsmedia_static_content');
+  features_revert_module('elmsmedia_video');
+  features_revert_module('elmsmedia_feature');
+  features_revert_module('elmsmedia_figure_label');
+  features_revert_module('elmsmedia_h5p');
+  module_disable(array('cis_section', 'elmsmedia_section_perms'));
+}
+
+/**
+ * Data model simplification.
+ */
+function elmsmedia_update_7025(&$sandbox) {
+  $modules = array(
+    'elmsmedia_section_perms',
+    'foundation_access_viewmodes',
+  );
+  db_delete('system')
+    ->condition('name', $modules, 'IN')
+    ->condition('type', 'module')
+    ->execute();
+}
+
+/**
+ * Brings lightbox to SVG.
+ */
+function elmsmedia_update_7026(&$sandbox) {
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * Drop legacy OG stuff as it's a performance killer
+ */
+function elmsmedia_update_7027(&$sandbox) {
+  module_disable(array('cis_service_lti'));
+  module_disable(array('lti_tool_provider_og'));
+  module_disable(array('og_access', 'og_context', 'og_ui'));
+  module_disable(array('og'));
+  drupal_uninstall_modules(array('cis_service_lti'));
+  drupal_uninstall_modules(array('lti_tool_provider_og'));
+  drupal_uninstall_modules(array('og_access', 'og_context', 'og_ui'));
+  drupal_uninstall_modules(array('og'));
+}
+
+/**
+ * Fix display options list for video
+ */
+function elmsmedia_update_7028(&$sandbox) {
+  features_revert_module('elmsmedia_image');
+}
+
+/**
+ * Start getting rid of ableplayer references
+ */
+function elmsmedia_update_7029(&$sandbox) {
+  features_revert_module('elmsmedia_external_video');
+  features_revert_module('elmsmedia_feature');
+  features_revert_module('elmsmedia_video');
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * Ensure 'full' mode is the first one for video
+ */
+function elmsmedia_update_7030(&$sandbox) {
+  features_revert_module('elmsmedia_image');
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * Ensure 'full' mode is the first one for audio
+ */
+function elmsmedia_update_7031(&$sandbox) {
+  features_revert_module('elmsmedia_audio');
+}
+
+/**
+ * Add comparison slider view mode
+ */
+function elmsmedia_update_7032(&$sandbox) {
+  features_revert_module('elmsmedia_view_mode_tabs');
+}
+
+/**
+ * External video caption support
+ */
+function elmsmedia_update_7033(&$sandbox) {
+  features_revert_module('elmsmedia_external_video');
 }

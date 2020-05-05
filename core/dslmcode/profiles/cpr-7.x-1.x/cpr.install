@@ -17,7 +17,30 @@ function cpr_install() {
   _elmsln_installer_post_install_cleanup();
   // homepage is the user
   variable_set('site_frontpage', 'user');
-  // we don't need a help and syllabus link for most authority systems
+  // we don't need these on authority systems
   variable_set('cis_help_page', '');
+  variable_set('cis_resource_page', '');
   variable_set('cis_syllabus_page', '');
+}
+
+
+/**
+ * Remove media preference field, we'll do this another way.
+ */
+function cpr_update_7001(&$sandbox) {
+  features_revert_module('cpr_user');
+}
+
+/**
+ * Fields added for banner and photo.
+ */
+function cpr_update_7002(&$sandbox) {
+  features_revert_module('cpr_user');
+}
+
+/**
+ * Support for flood control UI
+ */
+function cpr_update_7003(&$sandbox) {
+  module_enable(array('flood_unblock', 'flood_control'));
 }

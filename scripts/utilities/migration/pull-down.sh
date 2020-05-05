@@ -8,6 +8,8 @@
 # to rewrite the connection addresses
 # @todo make sure we verify A WHOLE BUNCH OF TIMES BEFORE LETTING THIS RUN :)
 source /var/www/elmsln/config/scripts/drush-create-site/config.cfg
+# load password config
+source /var/www/elmsln/config/scripts/drush-create-site/configpwd.cfg
 txtbld=$(tput bold)             # Bold
 bldgrn=$(tput setaf 2) #  green
 bldred=${txtbld}$(tput setaf 1) #  red
@@ -87,7 +89,7 @@ else
   pulldowntype=$5
 fi
 if [ -z "$6" ]; then
-  prompt="What alias group should we do this to? ($aliasgroup for everything or @courses-all for all courses for example)"
+  prompt="What alias group should we do this to? (@elmsln for everything or @courses-all for all courses for example)"
   read -rp "$prompt" aliasgroup
 else
   aliasgroup=$6
@@ -255,7 +257,7 @@ for i in $(find $dbs*/*/*.sql -type f); do
   # ignore default DBs as they are meaningless
   if [ ${arr[0]} != 'default' ]; then
     drush $drushalias sql-query --file=$i --y
-    # if this is a dev instnace of any kind then sanitize the data
+    # if this is a dev instance of any kind then sanitize the data
     if [ $pulldowntype != '1' ]; then
       drush $drushalias sqlsan --y
     fi
@@ -274,4 +276,6 @@ fi
 
 # clean up tmp directory
 sudo rm -rf $dbs
+# run permission clean up
+bash /var/www/elmsln/scripts/utilities/harden-security.sh
 elmslnecho 'Your site should now be available local to this machine. All communications between sites in the network have been rewritten to talk to each other. Enjoy!'

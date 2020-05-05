@@ -1,0 +1,333 @@
+<?php
+
+/**
+ * Implements hook_install().
+ *
+ * Perform actions to set up the site for this profile.
+ */
+function cle__2_install() {
+  // load the installer inlcude file
+  module_load_include('inc', 'cis_connector', 'includes/elmsln.install');
+  // do some initial clean up from the install
+  _elmsln_installer_preflight(TRUE);
+  // to standard theme routine
+  _elmsln_installer_theme('cle_foundation_access');
+  // establish admin role
+  _elmsln_installer_admin_role();
+  // standard clean up
+  _elmsln_installer_post_install_cleanup();
+
+  // set homepage
+  variable_set('site_frontpage', 'apps/lrnapp-studio-dashboard');
+  // last ditch revert
+  features_revert_module('cle_critique');
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_project');
+  features_revert_module('cle_submission');
+  features_revert_module('cle_perms');
+  features_revert_module('cle_textbook');
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function cle__2_update_7000(&$sandbox) {
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_submission');
+  features_revert_module('cle_project');
+}
+
+/**
+ * Get assignment and assignment link placement better
+ */
+function cle__2_update_7001(&$sandbox) {
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_submission');
+  features_revert_module('cle_cis_ux');
+  // new homepage as app is stable!
+  variable_set('site_frontpage', 'cle');
+  // shouldn't have been enabled in 2.x version
+  module_disable(array('cle_require_profile'));
+}
+
+/**
+ * Get appropriate settings in field options for cle_assignment.
+ */
+function cle__2_update_7002(&$sandbox) {
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_submission');
+  variable_set('site_frontpage', 'cle');
+}
+
+/**
+ * Minor settings standardization for available artifacts
+ */
+function cle__2_update_7003(&$sandbox) {
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_submission');
+  features_revert_module('cle_project');
+}
+
+/**
+ * Major permissions refactor to ensure everyone can do what they
+ * need to do.
+ */
+function cle__2_update_7004(&$sandbox) {
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_submission');
+  features_revert_module('cle_project');
+  features_revert_module('cle_perms');
+  features_revert_module('cle_section');
+  // rebuild permissions because many change at this point
+  node_access_rebuild();
+}
+
+/**
+ * Build styles dynamically on image field usage.
+ */
+function cle__2_update_7005(&$sandbox) {
+  features_revert_module('cle_cis_ux');
+}
+
+/**
+ * Add comment permissions and submission field for future sidecomment.js support
+ */
+function cle__2_update_7006(&$sandbox) {
+  features_revert_module('cle_perms');
+  features_revert_module('cle_submission');
+}
+
+/**
+ * xAPI tracking for view / duration stuff at least
+ */
+function cle__2_update_7007(&$sandbox) {
+  module_enable(array('elmsln_lrs'));
+}
+
+/**
+ * CLE Submission data model has an additional field for critique
+ */
+function cle__2_update_7008(&$sandbox) {
+  features_revert_module('cle_submission');
+}
+
+/**
+ * CLE permissions default to let authed users see stuff... duh.
+ */
+function cle__2_update_7009(&$sandbox) {
+  features_revert_module('cle_perms');
+}
+
+/**
+ * CLE comments feature added.
+ */
+function cle__2_update_7010(&$sandbox) {
+  module_enable(array('cle_submission_comments'));
+}
+
+/**
+ * CLE administration interface for bulk section association.
+ */
+function cle__2_update_7011(&$sandbox) {
+  module_enable(array('cle_displays'));
+}
+
+/**
+ * Enable comment notification settings
+ */
+function cle__2_update_7012(&$sandbox) {
+  module_enable(array('comment_notify', 'cle_comment_notify'));
+  features_revert_module('cle_displays');
+}
+
+/**
+ * Studio adds section filtering and comment cache frag granularity
+ */
+function cle__2_update_7013(&$sandbox) {
+  features_revert_module('cle_submission');
+}
+
+/**
+ * Implement rate so we can have a like stoage engine for comments
+ */
+function cle__2_update_7014(&$sandbox) {
+  module_enable(array('cle_rate'));
+}
+
+/**
+ * Enable the new studio instead of the angular one.
+ */
+function cle__2_update_7015(&$sandbox) {
+  // wipe cle_submission_comments
+  $modules = array(
+    'cle_submission_comments',
+  );
+  db_delete('system')
+    ->condition('name', $modules, 'IN')
+    ->condition('type', 'module')
+    ->execute();
+  // disable old app
+  module_disable(array('cle_app', 'cle_critique'));
+  // enable new app
+  module_enable(array('cle_open_studio_app'));
+  // revert the modules that were influenced by the switch
+  features_revert_module('cle_submission');
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_project');
+  features_revert_module('cle_perms');
+  // change the home page to be the dashboard
+  variable_set('site_frontpage', 'apps/lrnapp-studio-dashboard');
+}
+
+/**
+ * Adds cle_textbook.
+ */
+function cle__2_update_7016(&$sandbox) {
+  module_enable(array('cle_textbook'));
+}
+
+/**
+ * Clean up data model.
+ */
+function cle__2_update_7017(&$sandbox) {
+  // wipe more really old project references if there
+  $modules = array(
+    'cle_submission_assessment',
+    'cle_gradebook_ux',
+    'cle_gradebook',
+  );
+  db_delete('system')
+    ->condition('name', $modules, 'IN')
+    ->condition('type', 'module')
+    ->execute();
+  module_disable(array('unique_field'));
+  drupal_uninstall_modules(array('unique_field', 'cle_require_profile', 'cle_app'));
+  drupal_uninstall_modules(array('cle_critique'));
+  // revert the data model to match perfecto
+  features_revert_module('cle_assignment');
+  features_revert_module('cle_project');
+  features_revert_module('cle_submission');
+  features_revert_module('cle_textbook');
+  features_revert_module('cle_perms');
+  // drop legacy fields
+  field_delete_field('field_media_requirements');
+  field_delete_field('field_cle_sub_type');
+  field_delete_field('field_visibility');
+  field_delete_field('field_due_date');
+  field_delete_field('field_color');
+  field_delete_field('field_number');
+  field_delete_field('field_sub_number');
+  field_delete_field('field_cle_order');
+  field_delete_field('field_cis_tag');
+  field_delete_field('field_cle_crit_type');
+  field_delete_field('field_cle_crit_criteria');
+  field_delete_field('field_cle_crit_outline');
+  field_delete_field('field_cle_archived');
+  field_delete_field('field_cle_assignments');
+  // actually deletes the fields
+  field_purge_batch(1000);
+  field_purge_batch(1000);
+}
+
+/**
+ * Fix the fact that nodes were being told NOT to allow commenting by default.
+ */
+function cle__2_update_7018(&$sandbox) {
+  $submissions = _cis_connector_assemble_entity_list('node', 'cle_submission', 'nid', 'nid');
+  foreach ($submissions as $nid => $tmp) {
+    $submission = node_load($nid);
+    $submission->comment = 2;
+    // check for legacy body field to port it over
+    if (!empty($submission->body[LANGUAGE_NONE]) && empty($submission->field_submission_text[LANGUAGE_NONE])) {
+      $submission->field_submission_text[LANGUAGE_NONE][0]['value'] = $submission->body[LANGUAGE_NONE][0]['value'];
+      $submission->field_submission_text[LANGUAGE_NONE][0]['format'] = 'student_markdown';
+    }
+    node_save($submission); 
+  }
+}
+/**
+ * Fix permissions to match what backend will enforce now.
+ */
+function cle__2_update_7019(&$sandbox) {
+  features_revert_module('cle_perms');
+}
+
+/**
+ * Enable download module so we can bulk download items.
+ */
+function cle__2_update_7020(&$sandbox) {
+  module_enable(array('download'));
+  features_revert_module('cle_submission');
+}
+
+/**
+ * Upload field expanded to allow more types.
+ */
+function cle__2_update_7021(&$sandbox) {
+  features_revert_module('cle_submission');
+}
+
+/**
+ * Remove colorbox reference since we killed it.
+ */
+function cle__2_update_7022(&$sandbox) {
+  // wipe colorbox
+  $modules = array(
+    'colorbox',
+  );
+  db_delete('system')
+    ->condition('name', $modules, 'IN')
+    ->condition('type', 'module')
+    ->execute();
+}
+
+/**
+ * Instructors can now see the minor gradebook display
+ */
+function cle__2_update_7023(&$sandbox) {
+  features_revert_module('cle_perms');
+}
+
+
+/**
+ * Permissions clean up for students
+ */
+function cle__2_update_7024(&$sandbox) {
+  features_revert_module('cle_perms');
+}
+
+/**
+ * Assignment reordering, permission for assigning sections
+ */
+function cle__2_update_7025(&$sandbox) {
+  features_revert_module('cle_perms');
+  features_revert_module('cle_project');
+}
+
+/**
+ * Project reordering
+ */
+function cle__2_update_7026(&$sandbox) {
+  features_revert_module('cle_section');
+}
+
+/**
+ * Fix ability to download others work
+ */
+function cle__2_update_7027(&$sandbox) {
+  features_revert_module('cle_perms');
+}
+
+/**
+ * Fix instructor being able to see the work in a download
+ */
+function cle__2_update_7028(&$sandbox) {
+  features_revert_module('cle_perms');
+}
+
+/**
+ * View to add bulk
+ */
+function cle__2_update_7029(&$sandbox) {
+  features_revert_module('cle_displays');
+}

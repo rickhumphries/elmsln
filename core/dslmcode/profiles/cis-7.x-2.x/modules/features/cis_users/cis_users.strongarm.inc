@@ -53,13 +53,6 @@ function cis_users_strongarm() {
   $strongarm = new stdClass();
   $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
   $strongarm->api_version = 1;
-  $strongarm->name = 'jammer_user_delete_hide_button';
-  $strongarm->value = '1';
-  $export['jammer_user_delete_hide_button'] = $strongarm;
-
-  $strongarm = new stdClass();
-  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
-  $strongarm->api_version = 1;
   $strongarm->name = 'lti_tool_provider_user_attribute_mapping';
   $strongarm->value = array(
     'lis_person_name_given' => 'field_first_name',
@@ -71,42 +64,8 @@ function cis_users_strongarm() {
   $strongarm = new stdClass();
   $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
   $strongarm->api_version = 1;
-  $strongarm->name = 'nodeaccess_userreference';
-  $strongarm->value = array(
-    'academic_unit' => array(
-      'field_unit_head' => array(
-        'referenced' => array(
-          'update' => 'update',
-        ),
-        'author' => array(
-          'update' => 'update',
-        ),
-        'all' => array(
-          'view' => 'view',
-        ),
-        'unused' => '1',
-      ),
-      'field_coordinators' => array(
-        'referenced' => array(
-          'update' => 'update',
-        ),
-        'author' => array(
-          'update' => 'update',
-        ),
-        'all' => array(
-          'view' => 'view',
-        ),
-        'unused' => '1',
-      ),
-    ),
-  );
-  $export['nodeaccess_userreference'] = $strongarm;
-
-  $strongarm = new stdClass();
-  $strongarm->disabled = FALSE; /* Edit this to true to make a default strongarm disabled initially */
-  $strongarm->api_version = 1;
   $strongarm->name = 'user_admin_role';
-  $strongarm->value = '30037204';
+  $strongarm->value = 30037204;
   $export['user_admin_role'] = $strongarm;
 
   $strongarm = new stdClass();

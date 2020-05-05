@@ -126,6 +126,16 @@ function harmony_core_views_data_alter(&$data) {
     ),
   );
 
+  $data['harmony_thread']['term_thread_tid_depth'] = array(
+    'help' => t('Display thread if it has the selected taxonomy terms, or children of the selected terms. Due to additional complexity, this has fewer options than the versions without depth.'),
+    'real field' => 'thread_id',
+    'argument' => array(
+      'title' => t('Category (with depth)'),
+      'handler' => 'harmony_core_views_handler_argument_default_taxonomy_tid_depth',
+      'accept depth modifier' => TRUE,
+    ),
+  );
+
   // Provide a field which shows number of replies to a thread which is post
   // count - 1.
   $data['field_data_field_harmony_post_count']['harmony_thread_replies'] = array(
@@ -135,6 +145,17 @@ function harmony_core_views_data_alter(&$data) {
     'field' => $data['field_data_field_harmony_post_count']['field_harmony_post_count']['field'],
   );
   $data['field_data_field_harmony_post_count']['harmony_thread_replies']['field']['handler'] = 'harmony_core_views_handler_thread_field_replies';
+
+  $data['harmony_thread']['public'] = array(
+    'title' => t('Public'),
+    'help' => t('Whether or not the thread is visible to the public.'),
+    'field' => array(
+      'handler' => 'HarmonyCoreViewsHandlerFieldPublic',
+    ),
+    'filter' => array(
+      'handler' => 'HarmonyCoreViewsHandlerFilterPublic',
+    ),
+  );
 
   // ----------------------------------------------------------------------
   // History table
@@ -264,6 +285,17 @@ function harmony_core_views_data_alter(&$data) {
       'title' => t('Position in thread'),
       'help' => t('The position of the post within the thread it belongs to. Not recommended for listings which show posts from multiple threads or long lists of posts.'),
       'handler' => 'harmony_core_views_handler_post_field_position',
+    ),
+  );
+
+  $data['harmony_post']['public'] = array(
+    'title' => t('Public'),
+    'help' => t('Whether or not a post is visible to the public, this accounts for cases where a post is still published within an unpublished thread.'),
+    'field' => array(
+      'handler' => 'HarmonyCoreViewsHandlerFieldPostPublic',
+    ),
+    'filter' => array(
+      'handler' => 'HarmonyCoreViewsHandlerFilterPostPublic',
     ),
   );
 

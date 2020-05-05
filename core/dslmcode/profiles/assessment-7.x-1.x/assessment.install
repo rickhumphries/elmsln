@@ -15,4 +15,67 @@ function assessment_install() {
   _elmsln_installer_admin_role();
   // standard clean up
   _elmsln_installer_post_install_cleanup();
+  // clean up
+  features_revert_module('assessment_ux');
+  // front page
+  variable_set('site_frontpage', 'courses');
 }
+
+/**
+ * Implements hook_update_N().
+ */
+function assessment_update_7000(&$sandbox) {
+  module_enable(array('quiz_question', 'quiz_page', 'multichoice', 'quiz_directions', 'tincanapi', 'tincanapi_quiz', 'assessment_item', 'assessment_assignment', 'assessment_quiz'));
+}
+
+/**
+ * Enable core modules and features created after initial setup.
+ */
+function assessment_update_7001(&$sandbox) {
+  module_enable(array('assessment_gradebook', 'assessment_gradebook_ux', 'assessment_ux', 'assessment_evaluation', 'assessment_helper', 'assessment_perms'));
+}
+
+/**
+ * Enable more quiz question types.
+ */
+function assessment_update_7002(&$sandbox) {
+  module_enable(array('quiz_ddlines', 'long_answer', 'matching', 'scale', 'short_answer', 'truefalse'));
+}
+
+/**
+ * Quiz permissions to make it remotely usable.
+ */
+function assessment_update_7003(&$sandbox) {
+  module_enable(array('assessment_quiz_perms'));
+  // front page
+  variable_set('site_frontpage', 'courses');
+}
+
+/**
+ * Disable iframe provider / consumer in older deployments
+ */
+function assessment_update_7004(&$sandbox) {
+  module_disable(array('entity_iframe_provider', 'entity_iframe_consumer'));
+}
+
+/**
+ * TincanAPI Quiz integration was for 4.x, let's wait on the 5.x part.
+ */
+function assessment_update_7005(&$sandbox) {
+  module_disable(array('tincanapi_quiz'));
+}
+
+/**
+ * Permissions for seeing exported values.
+ */
+function assessment_update_7006(&$sandbox) {
+  features_revert_module('assessment_perms');
+}
+
+/**
+ * Add support for same capabilities as media system in rendering
+ */
+function assessment_update_7007(&$sandbox) {
+  module_enable(array('display_inherit', 'view_mode_tab', 'clipboardjs', 'assessment_view_mode_tabs'));
+}
+

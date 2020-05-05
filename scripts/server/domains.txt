@@ -45,6 +45,11 @@ NameVirtualHost *:80
     ServerName inbox.YOURUNIT.edu
     ServerAlias DATA.inbox.SERVICEYOURUNIT.edu
 </VirtualHost>
+<VirtualHost *:80>
+    DocumentRoot /var/www/elmsln/domains/hub
+    ServerName hub.YOURUNIT.edu
+    ServerAlias DATA.hub.SERVICEYOURUNIT.edu
+</VirtualHost>
 
 <Directory /var/www/elmsln/domains/online>
     AllowOverride all
@@ -91,6 +96,11 @@ NameVirtualHost *:80
     Order allow,deny
     allow from all
 </Directory>
+<Directory /var/www/elmsln/domains/hub>
+    AllowOverride all
+    Order allow,deny
+    allow from all
+</Directory>
 
 <VirtualHost *:80>
     DocumentRoot /var/www/elmsln/domains/people
@@ -133,16 +143,6 @@ NameVirtualHost *:80
     allow from all
 </Directory>
 
-# piwik analytics domain
-<VirtualHost *:80>
-    DocumentRoot /var/www/elmsln/domains/analytics
-    ServerName analytics.YOURUNIT.edu
-</VirtualHost>
-<Directory /var/www/elmsln/domains/analytics>
-    AllowOverride None
-    Order allow,deny
-    allow from all
-</Directory>
 # CDN module / static domain support
 <VirtualHost *:80>
     DocumentRoot /var/www/elmsln/domains

@@ -36,16 +36,63 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+vercomp () {
+  if [[ $1 == $2 ]]
+  then
+      return 0
+  fi
+  local IFS=.
+  local i ver1=($1) ver2=($2)
+  # fill empty fields in ver1 with zeros
+  for ((i=${#ver1[@]}; i<${#ver2[@]}; i++))
+  do
+      ver1[i]=0
+  done
+  for ((i=0; i<${#ver1[@]}; i++))
+  do
+      if [[ -z ${ver2[i]} ]]
+      then
+          # fill empty fields in ver2 with zeros
+          ver2[i]=0
+      fi
+      if ((10#${ver1[i]} > 10#${ver2[i]}))
+      then
+          return 1
+      fi
+      if ((10#${ver1[i]} < 10#${ver2[i]}))
+      then
+          return 2
+      fi
+  done
+  return 0
+}
+# apply to current user
+export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/$HOME/.composer/vendor/bin
+elmslnecho 'Update drush for current user'
+bash /var/www/elmsln/scripts/utilities/refresh-drush-config.sh
+# apply to root
+elmslnecho 'Update drush for root'
+su -c 'HOME=/root/ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/.composer/vendor/bin bash /var/www/elmsln/scripts/utilities/refresh-drush-config.sh' root
+# apply to ulmusdrush
+elmslnecho 'Update drush for ulmusdrush'
+su -c 'HOME=/home/ulmusdrush/ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/home/ulmusdrush/.composer/vendor/bin bash /var/www/elmsln/scripts/utilities/refresh-drush-config.sh' ulmusdrush
+# apply to ulmus
+elmslnecho 'Update drush for ulmus'
+su -c 'HOME=/home/ulmus/ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/home/ulmus/.composer/vendor/bin bash /var/www/elmsln/scripts/utilities/refresh-drush-config.sh' ulmus
+
 # variables for finding versions and doing comparisons
 source_dir="${elmsln}/scripts/upgrade/system"
 cd $elmsln
 code_version=$(<VERSION.txt)
 system_version_file="${elmsln}/config/SYSTEM_VERSION.txt"
 upgrade_history="${elmsln}/config/logs/upgrade_history.txt"
-# make sure config files exist
+# make sure config file for version exists
+# if it doesn't this implies a much older deployment getting
+# onto versions now
 if [ ! -f ${system_version_file} ];
   then
-  cp "${elmsln}/VERSION.txt" $system_version_file
+  touch $system_version_file
+  echo "0.0.0" > $system_version_file
 fi
 system_version=$(<${system_version_file})
 if [ ! -f ${upgrade_history} ];
@@ -55,10 +102,11 @@ if [ ! -f ${upgrade_history} ];
   echo "Initially installed as: ${code_version}" >> $upgrade_history
 fi
 
-if [[ "$code_version" < "$system_version" ]]; then
-  elmslnwarn "Your codebase is furter behind then the reported version of this config directory! Can't apply updates as this may have been migrated from a newer deployment into an older one. Make sure you update the elmsln code base via leafy in order to correct this issue!"
-  exit 1
-fi
+# todo, need to account for config directories that are further ahead then the code base
+#if [[ "$code_version" < "$system_version" ]]; then
+#  elmslnwarn "Your codebase is furter behind then the reported version of this config directory! Can't apply updates as this may have been migrated from a newer deployment into an older one. Make sure you update the elmsln code base via leafy in order to correct this issue!"
+#  exit 1
+#fi
 elmslnwarn "Current version of codebase: $code_version"
 elmslnwarn "Current version of your system: $system_version"
 
@@ -79,11 +127,26 @@ do
   # by running all upgrades in the correct sort order for all things
   # greater then 0.0.1 with the sanity check ensuring a 1.2.2 would not
   # be possible to run
-  if [[ "$upgrade" > "$system_version" ]] && [[ "$upgrade" = "$code_version" || "$upgrade" < "$code_version" ]]; then
+  mincomp=$(vercomp $upgrade $system_version)
+  min=$?
+  maxcomp=$(vercomp $code_version $upgrade)
+  max=$?
+  if [[ $min == 1 ]] && [[ $max == 1 ]]; then
     elmslnecho "$(timestamp): We need to run upgrade: $upgrade"
     bash "${upgrade}.sh"
-    # write this to the history that it was applied
-    echo "Applied upgrade $upgrade on ${timestamp}" >> $upgrade_history
+    echo "Applied upgrade $upgrade on $(timestamp)" >> $upgrade_history
+  else
+    # fallback case to see if they are the same so we know to apply
+    # this last upgrade script
+    if [[ "$upgrade" = "$code_version" ]]; then
+      if [[ "$upgrade" != "$system_version" ]]; then
+        elmslnecho "$(timestamp): We need to run upgrade: $upgrade"
+        bash "${upgrade}.sh"
+        echo "Applied upgrade $upgrade on $(timestamp)" >> $upgrade_history
+        # this is a sanity check to ensure we don't run scripts that shouldn't exist
+      fi
+      break
+    fi
   fi
 done
 # set to code version in case that version release doesn't have a bash script for it

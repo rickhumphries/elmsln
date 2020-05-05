@@ -1,0 +1,256 @@
+<?php
+/**
+ * @file
+ * Assessment integration improvements.
+ */
+
+/**
+ * Implements hook_elmsln_api_info().
+ */
+function assessment_helper_elmsln_api_info() {
+  // grade for this item
+  $callbacks['grade'] = array(
+    'methods' => array('POST'),
+    'file' => 'callbacks/v1/grade.inc',
+  );
+  return $callbacks;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function assessment_helper_permission() {
+  return array(
+    'export quiz results' => array(
+      'title' => t('Export quiz results'),
+      'description' => t('To download quiz results to csv.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function assessment_helper_menu() {
+  $items = array();
+  $items['node/%node/exportresults'] = array(
+    'title' => 'Export results',
+    'description' => 'Export quiz results',
+    'page callback' => '_assessment_helper_make_file',
+    'page arguments' => array(1, 3),
+    'access callback' =>'_assessment_helper_access_callback',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 10,
+  );
+  return $items;
+}
+
+/**
+ * Acces callback for node/%node/exportresults
+ * @param  object $node  node object
+ * @return boolean
+ */
+function _assessment_helper_access_callback($node) {
+  // only display for quiz if they have access
+  if (user_access('export quiz results') && in_array($node->type, array('quiz', 'cis_course', 'section'))) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_form_quiz_results_manage_results_form_alter().
+ */
+function assessment_helper_form_quiz_results_manage_results_form_alter(&$form, &$form_state) {
+  if ($node = menu_get_object()) {
+    $form['update']['download link'] = array('#markup' => l(t('Download All Results'), 'node/' . $node->nid . '/exportresults'));
+  }
+}
+
+/**
+ * Get records from the database and generate csv file.
+ */
+function _assessment_helper_make_file($node, $format = NULL) {
+  // quiz means its single, section/course we have to query
+  if ($node->type == 'quiz') {
+    $nodes = array($node->nid => $node);
+    if (empty($format)) {
+      $format = 'single';
+    }
+  }
+  elseif ($node->type == 'section') {
+    $nodes = _cis_connector_assemble_entity_list('node', 'quiz', 'nid', '_entity', array('og_group_ref' => array('target_id', $node->nid)), array('status' => 1), array('created'));
+    if (empty($format)) {
+      $format = 'overview';
+    }
+  }
+  elseif ($node->type == 'cis_course') {
+    $nodes = _cis_connector_assemble_entity_list('node', 'quiz', 'nid', '_entity', array('field_cis_course_ref' => array('target_id', $node->nid)), array('status' => 1), array('created'));
+    if (empty($format)) {
+      $format = 'overview';
+    }
+  }
+  // if we got nothing then ensure we fail safely
+  if (empty($nodes)) {
+    drupal_set_message(t('There are no results for this yet.'), 'status');
+    drupal_goto(arg(0) . '/' . arg(1));
+  }
+  // build the file and headers to send it off
+  $filename = check_plain(drupal_strtolower($node->title)) . "-report-" . date("F-j-Y-g-i-a") . ".csv";
+  $now = gmdate("D, d M Y H:i:s");
+  drupal_add_http_header("Expires", "Tue, 03 Jul 2001 06:00:00 GMT");
+  drupal_add_http_header("Cache-Control", "max-age=0, no-cache, must-revalidate, proxy-revalidate");
+  drupal_add_http_header("Last-Modified", "{$now} GMT");
+
+  // Force download.
+  drupal_add_http_header("Content-Type", "application/force-download");
+  drupal_add_http_header("Content-Type", "application/octet-stream");
+  drupal_add_http_header("Content-Type", "application/download");
+
+  // Disposition / encoding on response body.
+  drupal_add_http_header("Content-Disposition", "attachment;filename={$filename}");
+  drupal_add_http_header("Content-Transfer-Encoding", "binary");
+
+  ob_start();
+  $df = fopen("php://output", "w");
+  $headers = array(
+    t('USERNAME'),
+    t('EMAIL')
+  );
+  $nids = array();
+  // per node make header records
+  foreach ($nodes as $node) {
+    $nids[] = $node->nid;
+    $headers[] = check_plain(drupal_strtoupper($node->title));
+    $headers[] = t('perfect?');
+    $headers[] = t('is evaluated?');
+    $headers[] = t('started');
+    $headers[] = t('finished');
+    $headers[] = t('duration');
+  }
+  // Put the headers for the csv.
+  fputcsv($df, $headers);
+  // Get records from the DB.
+  $query = db_select('quiz_node_results', 'qnr');
+  $query->innerJoin('users', 'u', 'u.uid = qnr.uid');
+  // user uid
+  $query->addField('u', 'uid', 'uid');
+  // user name
+  $query->addField('u', 'name', 'name');
+  // user mail
+  $query->addField('u', 'mail', 'mail');
+  // start time
+  $query->addField('qnr', 'time_start', 'start');
+  // end time
+  $query->addField('qnr', 'time_end', 'end');
+  // score
+  $query->addField('qnr', 'score', 'score');
+  // nid
+  $query->addField('qnr', 'nid', 'nid');
+  // evaluation status
+  $query->addField('qnr', 'is_evaluated', 'evaluated');
+  // ensure user status
+  $query->condition('u.status', 1);
+  $query->condition('qnr.nid', $nids, 'IN');
+  // sort by qnr to try and get these in the right order
+  $query->orderBy('qnr.nid', 'DESC');
+  $query->orderBy('u.uid', 'DESC');
+
+  $result = $query->execute();
+  $rows = array();
+  // Build up the array of data to return
+  // @todo need to group this based on the user so we can do multiple in a row correctly
+  foreach ($result->fetchAll() as $row) {
+    $row->duration = ($row->end == 0 ? t('in progress') : round((($row->end - $row->start)/60), 2, PHP_ROUND_HALF_UP) . ' ' . t('minutes'));
+    $row->score = ($row->end == 0 ? t('in progress') : check_plain($row->score));
+    $row->end = ($row->end == 0 ? t('unfinished') : date("D, M d Y H:i:s", $row->end));
+    $row->start = date("D, M d Y H:i:s", $row->start);
+    $row->evaluated = ($row->evaluated == 0) ? t('No') : t('Yes');
+    // account for edge case names that are missing
+    if (empty($row->name)) {
+      if ($row->uid == '0') {
+        $row->name = variable_get('anonymous', 'Anonymous');
+      }
+      else {
+        $row->name = "ORPHAN " . $row->uid;
+      }
+    }
+    $rows[] = array(
+      'name' => $row->name,
+      'mail' => $row->mail,
+      'score' => $row->score,
+      'perfect' => ($row->score == 100 ? 1 : 0),
+      'evaluated' => $row->evaluated,
+      'start' => $row->start,
+      'end' => $row->end,
+      'duration' => $row->duration,
+      'nid' => $row->nid,
+    );
+  }
+  // account for the different modes of output
+  switch ($format) {
+    case 'single':
+      // hand this off based on what output we've wanted to make
+      // loop through rows and merge users together
+      foreach ($rows as $row) {
+        unset($row['nid']);
+        fputcsv($df, $row);
+      }
+    break;
+    case 'overview':
+      $csv = array();
+      // hand this off based on what output we've wanted to make
+      // loop through rows and merge users together
+      foreach ($rows as $row) {
+        // establish name container
+        if (!isset($csv[$row['name']])) {
+          $csv[$row['name']] = array(
+            'user' => array($row['name'], $row['mail']),
+          );
+        }
+        // see if there's already been a record for this user
+        // if so, we accept the higher value only
+        if (isset($csv[$row['name']][$row['nid']])) {
+          if ((int)$csv[$row['name']][$row['nid']]['score'] < (int)$row['score']) {
+            $csv[$row['name']][$row['nid']] = $row;
+          }
+          // see which is higher if we already have this
+        }
+        else {
+          $csv[$row['name']][$row['nid']] = $row;
+        }
+      }
+      // output new format for CSV file
+      foreach ($csv as $name => $row) {
+        $outrow = $row['user'];
+        // loop through the assembled quizzes
+        foreach ($nodes as $nid => $node) {
+          // they didn't do this quiz, set it empty
+          if (!isset($row[$nid])) {
+            $outrow[] = 0;
+            $outrow[] = 0;
+            $outrow[] = t('no');
+            $outrow[] = t('no data');
+            $outrow[] = t('no data');
+            $outrow[] = t('no data');
+          }
+          else {
+            // append answers, should be in the correct order because of NID matching
+            $outrow[] = $row[$nid]['score'];
+            $outrow[] = $row[$nid]['perfect'];
+            $outrow[] = $row[$nid]['evaluated'];
+            $outrow[] = $row[$nid]['start'];
+            $outrow[] = $row[$nid]['end'];
+            $outrow[] = $row[$nid]['duration'];
+          }
+        }
+        fputcsv($df, $outrow);
+      }
+    break;
+  }
+
+  fclose($df);
+  echo ob_get_clean();
+  drupal_exit();
+}

@@ -2,13 +2,13 @@
 // TODO: Should we split up the generic parts needed by the editor(and others), and the parts needed to "run" H5Ps?
 
 /** @namespace */
-var H5P = H5P || {};
+var H5P = window.H5P = window.H5P || {};
 
 /**
  * Tells us if we're inside of an iframe.
  * @member {boolean}
  */
-H5P.isFramed = (window.self !== window.top);
+H5P.isFramed = (window.self !== window.parent);
 
 /**
  * jQuery instance of current window.
@@ -32,7 +32,7 @@ if (document.documentElement.requestFullScreen) {
   H5P.fullScreenBrowserPrefix = '';
 }
 else if (document.documentElement.webkitRequestFullScreen) {
-  H5P.safariBrowser = navigator.userAgent.match(/Version\/(\d)/);
+  H5P.safariBrowser = navigator.userAgent.match(/version\/([.\d]+)/i);
   H5P.safariBrowser = (H5P.safariBrowser === null ? 0 : parseInt(H5P.safariBrowser[1]));
 
   // Do not allow fullscreen for safari < 7.
@@ -46,24 +46,6 @@ else if (document.documentElement.mozRequestFullScreen) {
 else if (document.documentElement.msRequestFullscreen) {
   H5P.fullScreenBrowserPrefix = 'ms';
 }
-
-/** @const {number} */
-H5P.DISABLE_NONE = 0;
-
-/** @const {number} */
-H5P.DISABLE_FRAME = 1;
-
-/** @const {number} */
-H5P.DISABLE_DOWNLOAD = 2;
-
-/** @const {number} */
-H5P.DISABLE_EMBED = 4;
-
-/** @const {number} */
-H5P.DISABLE_COPYRIGHT = 8;
-
-/** @const {number} */
-H5P.DISABLE_ABOUT = 16;
 
 /**
  * Keep track of when the H5Ps where started.
@@ -85,20 +67,30 @@ H5P.init = function (target) {
   }
 
   // Determine if we can use full screen
-  if (H5P.canHasFullScreen === undefined) {
+  if (H5P.fullscreenSupported === undefined) {
     /**
      * Use this variable to check if fullscreen is supported. Fullscreen can be
      * restricted when embedding since not all browsers support the native
      * fullscreen, and the semi-fullscreen solution doesn't work when embedded.
      * @type {boolean}
      */
-    H5P.canHasFullScreen = (H5P.isFramed && H5P.externalEmbed !== false) ? ((document.fullscreenEnabled || document.webkitFullscreenEnabled || document.mozFullScreenEnabled) ? true : false) : true;
-    // We should consider document.msFullscreenEnabled when they get their
-    // element sizing corrected. Ref. https://connect.microsoft.com/IE/feedback/details/838286/ie-11-incorrectly-reports-dom-element-sizes-in-fullscreen-mode-when-fullscreened-element-is-within-an-iframe
+    H5P.fullscreenSupported = !H5PIntegration.fullscreenDisabled && !H5P.fullscreenDisabled && (!(H5P.isFramed && H5P.externalEmbed !== false) || !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || document.mozFullScreenEnabled));
+    // -We should consider document.msFullscreenEnabled when they get their
+    // -element sizing corrected. Ref. https://connect.microsoft.com/IE/feedback/details/838286/ie-11-incorrectly-reports-dom-element-sizes-in-fullscreen-mode-when-fullscreened-element-is-within-an-iframe
+    // Update: Seems to be no need as they've moved on to Webkit
+  }
+
+  // Deprecated variable, kept to maintain backwards compatability
+  if (H5P.canHasFullScreen === undefined) {
+    /**
+     * @deprecated since version 1.11
+     * @type {boolean}
+     */
+    H5P.canHasFullScreen = H5P.fullscreenSupported;
   }
 
   // H5Ps added in normal DIV.
-  var $containers = H5P.jQuery('.h5p-content:not(.h5p-initialized)', target).each(function () {
+  H5P.jQuery('.h5p-content:not(.h5p-initialized)', target).each(function () {
     var $element = H5P.jQuery(this).addClass('h5p-initialized');
     var $container = H5P.jQuery('<div class="h5p-container"></div>').appendTo($element);
     var contentId = $element.data('content-id');
@@ -108,10 +100,11 @@ H5P.init = function (target) {
     }
     var library = {
       library: contentData.library,
-      params: JSON.parse(contentData.jsonContent)
+      params: JSON.parse(contentData.jsonContent),
+      metadata: contentData.metadata
     };
 
-    H5P.getUserData(contentId, 'state', function (err, previousState) {
+    H5P.getUserData(contentId, 'state', function (err, previousState) {
       if (previousState) {
         library.userDatas = {
           state: previousState
@@ -122,70 +115,94 @@ H5P.init = function (target) {
         delete contentData.contentUserData;
         var dialog = new H5P.Dialog('content-user-data-reset', 'Data Reset', '<p>' + H5P.t('contentChanged') + '</p><p>' + H5P.t('startingOver') + '</p><div class="h5p-dialog-ok-button" tabIndex="0" role="button">OK</div>', $container);
         H5P.jQuery(dialog).on('dialog-opened', function (event, $dialog) {
-          $dialog.find('.h5p-dialog-ok-button').click(function () {
-            dialog.close();
-          }).keypress(function (event) {
-            if (event.which === 32) {
+
+          var closeDialog = function (event) {
+            if (event.type === 'click' || event.which === 32) {
               dialog.close();
+              H5P.deleteUserData(contentId, 'state', 0);
             }
-          });
+          };
+
+          $dialog.find('.h5p-dialog-ok-button').click(closeDialog).keypress(closeDialog);
+          H5P.trigger(instance, 'resize');
+        }).on('dialog-closed', function () {
+          H5P.trigger(instance, 'resize');
         });
         dialog.open();
       }
+      // If previousState is false we don't have a previous state
     });
 
     // Create new instance.
-    var instance = H5P.newRunnable(library, contentId, $container, true);
+    var instance = H5P.newRunnable(library, contentId, $container, true, {standalone: true});
 
     // Check if we should add and display a fullscreen button for this H5P.
-    if (contentData.fullScreen == 1 && H5P.canHasFullScreen) {
-      H5P.jQuery('<div class="h5p-content-controls"><div role="button" tabindex="1" class="h5p-enable-fullscreen" title="' + H5P.t('fullscreen') + '"></div></div>').prependTo($container).children().click(function () {
-        H5P.fullScreen($container, instance);
-      });
+    if (contentData.fullScreen == 1 && H5P.fullscreenSupported) {
+      H5P.jQuery(
+        '<div class="h5p-content-controls">' +
+          '<div role="button" ' +
+                'tabindex="0" ' +
+                'class="h5p-enable-fullscreen" ' +
+                'aria-label="' + H5P.t('fullscreen') + '" ' +
+                'title="' + H5P.t('fullscreen') + '">' +
+          '</div>' +
+        '</div>')
+        .prependTo($container)
+          .children()
+          .click(function () {
+            H5P.fullScreen($container, instance);
+          })
+        .keydown(function (e) {
+          if (e.which === 32 || e.which === 13) {
+            H5P.fullScreen($container, instance);
+            return false;
+          }
+        })
+      ;
     }
 
-    // Create action bar
-    var $actions = H5P.jQuery('<ul class="h5p-actions"></ul>');
-    if (!(contentData.disable & H5P.DISABLE_DOWNLOAD)) {
-      // Add export button
-      H5P.jQuery('<li class="h5p-button h5p-export" role="button" tabindex="1" title="' + H5P.t('downloadDescription') + '">' + H5P.t('download') + '</li>').appendTo($actions).click(function () {
-        window.location.href = contentData.exportUrl;
-      });
-    }
-    if (!(contentData.disable & H5P.DISABLE_COPYRIGHT)) {
-      var copyright = H5P.getCopyrights(instance, library.params, contentId);
-
-      if (copyright) {
-        // Add copyright dialog button
-        H5P.jQuery('<li class="h5p-button h5p-copyrights" role="button" tabindex="1" title="' + H5P.t('copyrightsDescription') + '">' + H5P.t('copyrights') + '</li>').appendTo($actions).click(function () {
-          // Open dialog with copyright information
-          var dialog = new H5P.Dialog('copyrights', H5P.t('copyrightInformation'), copyright, $container);
-          dialog.open();
-        });
+    /**
+     * Create action bar
+     */
+    var displayOptions = contentData.displayOptions;
+    var displayFrame = false;
+    if (displayOptions.frame) {
+      // Special handling of copyrights
+      if (displayOptions.copyright) {
+        var copyrights = H5P.getCopyrights(instance, library.params, contentId, library.metadata);
+        if (!copyrights) {
+          displayOptions.copyright = false;
+        }
       }
-    }
-    if (!(contentData.disable & H5P.DISABLE_EMBED)) {
-      // Add embed button
-      H5P.jQuery('<li class="h5p-button h5p-embed" role="button" tabindex="1" title="' + H5P.t('embedDescription') + '">' + H5P.t('embed') + '</li>').appendTo($actions).click(function () {
+
+      // Create action bar
+      var actionBar = new H5P.ActionBar(displayOptions);
+      var $actions = actionBar.getDOMElement();
+
+      actionBar.on('reuse', function () {
+        H5P.openReuseDialog($actions, contentData, library, instance, contentId);
+        instance.triggerXAPI('accessed-reuse');
+      });
+      actionBar.on('copyrights', function () {
+        var dialog = new H5P.Dialog('copyrights', H5P.t('copyrightInformation'), copyrights, $container);
+        dialog.open(true);
+        instance.triggerXAPI('accessed-copyright');
+      });
+      actionBar.on('embed', function () {
         H5P.openEmbedDialog($actions, contentData.embedCode, contentData.resizeCode, {
           width: $element.width(),
           height: $element.height()
-        });
+        }, instance);
+        instance.triggerXAPI('accessed-embed');
       });
+
+      if (actionBar.hasActions()) {
+        displayFrame = true;
+        $actions.insertAfter($container);
+      }
     }
 
-    if (!(contentData.disable & H5P.DISABLE_ABOUT)) {
-      // Add about H5P button icon
-      H5P.jQuery('<li><a class="h5p-link" href="http://h5p.org" target="_blank" title="' + H5P.t('h5pDescription') + '"></a></li>').appendTo($actions);
-    }
-
-    // Insert action bar if it has any content
-    if (!(contentData.disable & H5P.DISABLE_FRAME) && $actions.children().length) {
-      $actions.insertAfter($container);
-    }
-    else {
-      $element.addClass('h5p-no-frame');
-    }
+    $element.addClass(displayFrame ? 'h5p-frame' : 'h5p-no-frame');
 
     // Keep track of when we started
     H5P.opened[contentId] = new Date();
@@ -205,7 +222,7 @@ H5P.init = function (target) {
         instance.getCurrentState instanceof Function ||
         typeof instance.getCurrentState === 'function')) {
 
-      var saveTimer, save = function () {
+      var saveTimer, save = function () {
         var state = instance.getCurrentState();
         if (state !== undefined) {
           H5P.setUserData(contentId, 'state', state, {deleteOnChange: true});
@@ -236,7 +253,7 @@ H5P.init = function (target) {
       if (H5P.externalEmbed === false) {
         // Internal embed
         // Make it possible to resize the iframe when the content changes size. This way we get no scrollbars.
-        var iframe = window.parent.document.getElementById('h5p-iframe-' + contentId);
+        var iframe = window.frameElement;
         var resizeIframe = function () {
           if (window.parent.H5P.isFullscreen) {
             return; // Skip if full screen.
@@ -245,6 +262,11 @@ H5P.init = function (target) {
           // Retain parent size to avoid jumping/scrolling
           var parentHeight = iframe.parentElement.style.height;
           iframe.parentElement.style.height = iframe.parentElement.clientHeight + 'px';
+
+          // Note:  Force layout reflow
+          //        This fixes a flickering bug for embedded content on iPads
+          //        @see https://github.com/h5p/h5p-moodle-plugin/issues/237
+          iframe.getBoundingClientRect();
 
           // Reset iframe height, in case content has shrinked.
           iframe.style.height = '1px';
@@ -278,6 +300,9 @@ H5P.init = function (target) {
           // Initial setup/handshake is done
           parentIsFriendly = true;
 
+          // Make iframe responsive
+          document.body.style.height = 'auto';
+
           // Hide scrollbars for correct size
           document.body.style.overflow = 'hidden';
 
@@ -286,9 +311,9 @@ H5P.init = function (target) {
         });
 
         // When resize has been prepared tell parent window to resize
-        H5P.communicator.on('resizePrepared', function (data) {
+        H5P.communicator.on('resizePrepared', function () {
           H5P.communicator.send('resize', {
-            height: document.body.scrollHeight
+            scrollHeight: document.body.scrollHeight
           });
         });
 
@@ -306,7 +331,10 @@ H5P.init = function (target) {
           resizeDelay = setTimeout(function () {
             // Only resize if the iframe can be resized
             if (parentIsFriendly) {
-              H5P.communicator.send('prepareResize');
+              H5P.communicator.send('prepareResize', {
+                scrollHeight: document.body.scrollHeight,
+                clientHeight: document.body.clientHeight
+              });
             }
             else {
               H5P.communicator.send('hello');
@@ -318,7 +346,7 @@ H5P.init = function (target) {
 
     if (!H5P.isFramed || H5P.externalEmbed === false) {
       // Resize everything when window is resized.
-      H5P.jQuery(window.top).resize(function () {
+      H5P.jQuery(window.parent).resize(function () {
         if (window.parent.H5P.isFullscreen) {
           // Use timeout to avoid bug in certain browsers when exiting fullscreen. Some browser will trigger resize before the fullscreenchange event.
           H5P.trigger(instance, 'resize');
@@ -368,11 +396,12 @@ H5P.getHeadTags = function (contentId) {
     return tags;
   };
 
-  return createStyleTags(H5PIntegration.core.styles) +
+  return '<base target="_parent">' +
+         createStyleTags(H5PIntegration.core.styles) +
          createStyleTags(H5PIntegration.contents['cid-' + contentId].styles) +
          createScriptTags(H5PIntegration.core.scripts) +
          createScriptTags(H5PIntegration.contents['cid-' + contentId].scripts) +
-         '<script>H5PIntegration = window.top.H5PIntegration; var H5P = H5P || {}; H5P.externalEmbed = false;</script>';
+         '<script>H5PIntegration = window.parent.H5PIntegration; var H5P = H5P || {}; H5P.externalEmbed = false;</script>';
 };
 
 /**
@@ -380,7 +409,7 @@ H5P.getHeadTags = function (contentId) {
  *
  * @type {Communicator}
  */
-H5P.communicator = (function () {
+H5P.communicator = (function () {
   /**
    * @class
    * @private
@@ -419,7 +448,7 @@ H5P.communicator = (function () {
      * @param {string} action
      * @param {Object} [data] payload
      */
-    self.send = function (action, data) {
+    self.send = function (action, data) {
       if (data === undefined) {
         data = {};
       }
@@ -435,24 +464,37 @@ H5P.communicator = (function () {
 })();
 
 /**
- * Enter fullscreen for the given H5P instance.
+ * Enter semi fullscreen for the given H5P instance
  *
  * @param {H5P.jQuery} $element Content container.
  * @param {Object} instance
  * @param {function} exitCallback Callback function called when user exits fullscreen.
  * @param {H5P.jQuery} $body For internal use. Gives the body of the iframe.
  */
-H5P.fullScreen = function ($element, instance, exitCallback, body) {
+H5P.semiFullScreen = function ($element, instance, exitCallback, body) {
+  H5P.fullScreen($element, instance, exitCallback, body, true);
+};
+
+/**
+ * Enter fullscreen for the given H5P instance.
+ *
+ * @param {H5P.jQuery} $element Content container.
+ * @param {Object} instance
+ * @param {function} exitCallback Callback function called when user exits fullscreen.
+ * @param {H5P.jQuery} $body For internal use. Gives the body of the iframe.
+ * @param {Boolean} forceSemiFullScreen
+ */
+H5P.fullScreen = function ($element, instance, exitCallback, body, forceSemiFullScreen) {
   if (H5P.exitFullScreen !== undefined) {
     return; // Cannot enter new fullscreen until previous is over
   }
 
   if (H5P.isFramed && H5P.externalEmbed === false) {
     // Trigger resize on wrapper in parent window.
-    window.top.H5P.fullScreen($element, instance, exitCallback, H5P.$body.get());
+    window.parent.H5P.fullScreen($element, instance, exitCallback, H5P.$body.get(), forceSemiFullScreen);
     H5P.isFullscreen = true;
     H5P.exitFullScreen = function () {
-      window.top.H5P.exitFullScreen();
+      window.parent.H5P.exitFullScreen();
     };
     H5P.on(instance, 'exitFullScreen', function () {
       H5P.isFullscreen = false;
@@ -462,7 +504,7 @@ H5P.fullScreen = function ($element, instance, exitCallback, body) {
   }
 
   var $container = $element;
-  var $classes, $iframe;
+  var $classes, $iframe, $body;
   if (body === undefined)  {
     $body = H5P.$body;
   }
@@ -529,7 +571,7 @@ H5P.fullScreen = function ($element, instance, exitCallback, body) {
   };
 
   H5P.isFullscreen = true;
-  if (H5P.fullScreenBrowserPrefix === undefined) {
+  if (H5P.fullScreenBrowserPrefix === undefined || forceSemiFullScreen === true) {
     // Create semi fullscreen.
 
     if (H5P.isFramed) {
@@ -537,8 +579,16 @@ H5P.fullScreen = function ($element, instance, exitCallback, body) {
     }
 
     before('h5p-semi-fullscreen');
-    var $disable = H5P.jQuery('<div role="button" tabindex="1" class="h5p-disable-fullscreen" title="' + H5P.t('disableFullscreen') + '"></div>').appendTo($container.find('.h5p-content-controls'));
-    var keyup, disableSemiFullscreen = function () {
+    var $disable = H5P.jQuery('<div role="button" tabindex="0" class="h5p-disable-fullscreen" title="' + H5P.t('disableFullscreen') + '" aria-label="' + H5P.t('disableFullscreen') + '"></div>').appendTo($container.find('.h5p-content-controls'));
+    var keyup, disableSemiFullscreen = H5P.exitFullScreen = function () {
+      if (prevViewportContent) {
+        // Use content from the previous viewport tag
+        h5pViewport.content = prevViewportContent;
+      }
+      else {
+        // Remove viewport tag
+        head.removeChild(h5pViewport);
+      }
       $disable.remove();
       $body.unbind('keyup', keyup);
       done('h5p-semi-fullscreen');
@@ -550,6 +600,30 @@ H5P.fullScreen = function ($element, instance, exitCallback, body) {
     };
     $disable.click(disableSemiFullscreen);
     $body.keyup(keyup);
+
+    // Disable zoom
+    var prevViewportContent, h5pViewport;
+    var metaTags = document.getElementsByTagName('meta');
+    for (var i = 0; i < metaTags.length; i++) {
+      if (metaTags[i].name === 'viewport') {
+        // Use the existing viewport tag
+        h5pViewport = metaTags[i];
+        prevViewportContent = h5pViewport.content;
+        break;
+      }
+    }
+    if (!prevViewportContent) {
+      // Create a new viewport tag
+      h5pViewport = document.createElement('meta');
+      h5pViewport.name = 'viewport';
+    }
+    h5pViewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0';
+    if (!prevViewportContent) {
+      // Insert the new viewport tag
+      var head = document.getElementsByTagName('head')[0];
+      head.appendChild(h5pViewport);
+    }
+
     entered();
   }
   else {
@@ -614,8 +688,17 @@ H5P.getPath = function (path, contentId) {
     return path;
   }
 
-  if (contentId !== undefined) {
-    prefix = H5PIntegration.url + '/content/' + contentId;
+  var prefix;
+  var isTmpFile = (path.substr(-4,4) === '#tmp');
+  if (contentId !== undefined && !isTmpFile) {
+    // Check for custom override URL
+    if (H5PIntegration.contents !== undefined &&
+        H5PIntegration.contents['cid-' + contentId]) {
+      prefix = H5PIntegration.contents['cid-' + contentId].contentUrl;
+    }
+    if (!prefix) {
+      prefix = H5PIntegration.url + '/content/' + contentId;
+    }
   }
   else if (window.H5PEditor !== undefined) {
     prefix = H5PEditor.filesPath;
@@ -681,9 +764,6 @@ H5P.classFromName = function (name) {
  *   Instance.
  */
 H5P.newRunnable = function (library, contentId, $attachTo, skipResize, extras) {
-  // TODO: Should we check if version matches the library?
-  // TODO: Dynamically try to load libraries currently not loaded? That will require a callback.
-
   var nameSplit, versionSplit, machineName;
   try {
     nameSplit = library.library.split(' ', 2);
@@ -726,6 +806,15 @@ H5P.newRunnable = function (library, contentId, $attachTo, skipResize, extras) {
     extras.previousState = library.userDatas.state;
   }
 
+  if (library.metadata) {
+    extras.metadata = library.metadata;
+  }
+
+  // Makes all H5P libraries extend H5P.ContentType:
+  var standalone = extras.standalone || false;
+  // This order makes it possible for an H5P library to override H5P.ContentType functions!
+  constructor.prototype = H5P.jQuery.extend({}, H5P.ContentType(standalone).prototype, constructor.prototype);
+
   var instance;
   // Some old library versions have their own custom third parameter.
   // Make sure we don't send them the extras.
@@ -750,8 +839,18 @@ H5P.newRunnable = function (library, contentId, $attachTo, skipResize, extras) {
   if (instance.parent === undefined && extras && extras.parent) {
     instance.parent = extras.parent;
   }
+  if (instance.libraryInfo === undefined) {
+    instance.libraryInfo = {
+      versionedName: library.library,
+      versionedNameNoSpaces: machineName + '-' + versionSplit[0] + '.' + versionSplit[1],
+      machineName: machineName,
+      majorVersion: versionSplit[0],
+      minorVersion: versionSplit[1]
+    };
+  }
 
   if ($attachTo !== undefined) {
+    $attachTo.toggleClass('h5p-standalone', standalone);
     instance.attach($attachTo);
     H5P.trigger(instance, 'domChanged', {
       '$target': $attachTo,
@@ -783,9 +882,9 @@ H5P.error = function (err) {
  *
  * @param {string} key
  *   Translation identifier, may only contain a-zA-Z0-9. No spaces or special chars.
- * @param {Object} vars
+ * @param {Object} [vars]
  *   Data for placeholders.
- * @param {string} ns
+ * @param {string} [ns]
  *   Translation namespace. Defaults to H5P.
  * @returns {string}
  *   Translated text
@@ -829,12 +928,13 @@ H5P.t = function (key, vars, ns) {
  *   Which DOM element the dialog should be inserted after.
  */
 H5P.Dialog = function (name, title, content, $element) {
+  /** @alias H5P.Dialog# */
   var self = this;
   var $dialog = H5P.jQuery('<div class="h5p-popup-dialog h5p-' + name + '-dialog">\
                               <div class="h5p-inner">\
                                 <h2>' + title + '</h2>\
                                 <div class="h5p-scroll-content">' + content + '</div>\
-                                <div class="h5p-close" role="button" tabindex="1" title="' + H5P.t('close') + '">\
+                                <div class="h5p-close" role="button" tabindex="0" aria-label="' + H5P.t('close') + '" title="' + H5P.t('close') + '"></div>\
                               </div>\
                             </div>')
     .insertAfter($element)
@@ -850,9 +950,20 @@ H5P.Dialog = function (name, title, content, $element) {
           self.close();
         })
         .end()
-      .end();
+      .find('a')
+        .click(function (e) {
+          e.stopPropagation();
+        })
+      .end()
+    .end();
 
-  this.open = function () {
+  /**
+   * Opens the dialog.
+   */
+  self.open = function (scrollbar) {
+    if (scrollbar) {
+      $dialog.css('height', '100%');
+    }
     setTimeout(function () {
       $dialog.addClass('h5p-open'); // Fade in
       // Triggering an event, in case something has to be done after dialog has been opened.
@@ -860,10 +971,14 @@ H5P.Dialog = function (name, title, content, $element) {
     }, 1);
   };
 
-  this.close = function () {
+  /**
+   * Closes the dialog.
+   */
+  self.close = function () {
     $dialog.removeClass('h5p-open'); // Fade out
     setTimeout(function () {
       $dialog.remove();
+      H5P.jQuery(self).trigger('dialog-closed', [$dialog]);
     }, 200);
   };
 };
@@ -877,9 +992,11 @@ H5P.Dialog = function (name, title, content, $element) {
  *   Parameters of the content instance.
  * @param {number} contentId
  *   Identifies the H5P content
+ * @param {Object} metadata
+ *   Metadata of the content instance.
  * @returns {string} Copyright information.
  */
-H5P.getCopyrights = function (instance, parameters, contentId) {
+H5P.getCopyrights = function (instance, parameters, contentId, metadata) {
   var copyrights;
 
   if (instance.getCopyrights !== undefined) {
@@ -898,6 +1015,11 @@ H5P.getCopyrights = function (instance, parameters, contentId) {
     H5P.findCopyrights(copyrights, parameters, contentId);
   }
 
+  var metadataCopyrights = H5P.buildMetadataCopyrights(metadata, instance.libraryInfo.machineName);
+  if (metadataCopyrights !== undefined) {
+    copyrights.addMediaInFront(metadataCopyrights);
+  }
+
   if (copyrights !== undefined) {
     // Convert to string
     copyrights = copyrights.toString();
@@ -914,21 +1036,54 @@ H5P.getCopyrights = function (instance, parameters, contentId) {
  *   To search for file objects in.
  * @param {number} contentId
  *   Used to insert thumbnails for images.
+ * @param {Object} extras - Extras.
+ * @param {object} extras.metadata - Metadata
+ * @param {object} extras.machineName - Library name of some kind.
+ *   Metadata of the content instance.
  */
-H5P.findCopyrights = function (info, parameters, contentId) {
+H5P.findCopyrights = function (info, parameters, contentId, extras) {
+  // If extras are
+  if (extras) {
+    extras.params = parameters;
+    buildFromMetadata(extras, extras.machineName, contentId);
+  }
+
+  var lastContentTypeName;
   // Cycle through parameters
   for (var field in parameters) {
     if (!parameters.hasOwnProperty(field)) {
       continue; // Do not check
     }
+
+    /**
+     * @deprecated This hack should be removed after 2017-11-01
+     * The code that was using this was removed by HFP-574
+     * This note was seen on 2018-04-04, and consultation with
+     * higher authorities lead to keeping the code for now ;-)
+     */
+    if (field === 'overrideSettings') {
+      console.warn("The semantics field 'overrideSettings' is DEPRECATED and should not be used.");
+      console.warn(parameters);
+      continue;
+    }
+
     var value = parameters[field];
+
+    if (value && value.library && typeof value.library === 'string') {
+      lastContentTypeName = value.library.split(' ')[0];
+    }
+    else if (value && value.library && typeof value.library === 'object') {
+      lastContentTypeName = (value.library.library && typeof value.library.library === 'string') ? value.library.library.split(' ')[0] : lastContentTypeName;
+    }
 
     if (value instanceof Array) {
       // Cycle through array
       H5P.findCopyrights(info, value, contentId);
     }
     else if (value instanceof Object) {
-      // Check if object is a file with copyrights
+      buildFromMetadata(value, lastContentTypeName, contentId);
+
+      // Check if object is a file with copyrights (old core)
       if (value.copyright === undefined ||
           value.copyright.license === undefined ||
           value.path === undefined ||
@@ -946,9 +1101,103 @@ H5P.findCopyrights = function (info, parameters, contentId) {
         info.addMedia(copyrights);
       }
     }
-    else {
+  }
+
+  function buildFromMetadata(data, name, contentId) {
+    if (data.metadata) {
+      const metadataCopyrights = H5P.buildMetadataCopyrights(data.metadata, name);
+      if (metadataCopyrights !== undefined) {
+        if (data.params && data.params.contentName === 'Image' && data.params.file) {
+          const path = data.params.file.path;
+          const width = data.params.file.width;
+          const height = data.params.file.height;
+          metadataCopyrights.setThumbnail(new H5P.Thumbnail(H5P.getPath(path, contentId), width, height));
+        }
+        info.addMedia(metadataCopyrights);
+      }
     }
   }
+};
+
+H5P.buildMetadataCopyrights = function (metadata) {
+  if (metadata && metadata.license !== undefined && metadata.license !== 'U') {
+    var dataset = {
+      contentType: metadata.contentType,
+      title: metadata.title,
+      author: (metadata.authors && metadata.authors.length > 0) ? metadata.authors.map(function (author) {
+        return (author.role) ? author.name + ' (' + author.role + ')' : author.name;
+      }).join(', ') : undefined,
+      source: metadata.source,
+      year: (metadata.yearFrom) ? (metadata.yearFrom + ((metadata.yearTo) ? '-' + metadata.yearTo: '')) : undefined,
+      license: metadata.license,
+      version: metadata.licenseVersion,
+      licenseExtras: metadata.licenseExtras,
+      changes: (metadata.changes && metadata.changes.length > 0) ? metadata.changes.map(function (change) {
+        return change.log + (change.author ? ', ' + change.author : '') + (change.date ? ', ' + change.date : '');
+      }).join(' / ') : undefined
+    };
+
+    return new H5P.MediaCopyright(dataset);
+  }
+};
+
+/**
+ * Display a dialog containing the download button and copy button.
+ *
+ * @param {H5P.jQuery} $element
+ * @param {Object} contentData
+ * @param {Object} library
+ * @param {Object} instance
+ * @param {number} contentId
+ */
+H5P.openReuseDialog = function ($element, contentData, library, instance, contentId) {
+  let html = '';
+  if (contentData.displayOptions.export) {
+    html += '<button type="button" class="h5p-big-button h5p-download-button"><div class="h5p-button-title">Download as an .h5p file</div><div class="h5p-button-description">.h5p files may be uploaded to any web-site where H5P content may be created.</div></button>';
+  }
+  if (contentData.displayOptions.export && contentData.displayOptions.copy) {
+    html += '<div class="h5p-horizontal-line-text"><span>or</span></div>';
+  }
+  if (contentData.displayOptions.copy) {
+    html += '<button type="button" class="h5p-big-button h5p-copy-button"><div class="h5p-button-title">Copy content</div><div class="h5p-button-description">Copied content may be pasted anywhere this content type is supported on this website.</div></button>';
+  }
+
+  const dialog = new H5P.Dialog('reuse', H5P.t('reuseContent'), html, $element);
+
+  // Selecting embed code when dialog is opened
+  H5P.jQuery(dialog).on('dialog-opened', function (e, $dialog) {
+    H5P.jQuery('<a href="https://h5p.org/node/442225" target="_blank">More Info</a>').click(function (e) {
+      e.stopPropagation();
+    }).appendTo($dialog.find('h2'));
+    $dialog.find('.h5p-download-button').click(function () {
+      window.location.href = contentData.exportUrl;
+      instance.triggerXAPI('downloaded');
+      dialog.close();
+    });
+    $dialog.find('.h5p-copy-button').click(function () {
+      const item = new H5P.ClipboardItem(library);
+      item.contentId = contentId;
+      H5P.setClipboard(item);
+      instance.triggerXAPI('copied');
+      dialog.close();
+      H5P.attachToastTo(
+        H5P.jQuery('.h5p-content:first')[0],
+        H5P.t('contentCopied'),
+        {
+          position: {
+            horizontal: 'centered',
+            vertical: 'centered',
+            noOverflowX: true
+          }
+        }
+      );
+    });
+    H5P.trigger(instance, 'resize');
+  }).on('dialog-closed', function () {
+    H5P.trigger(instance, 'resize');
+  });
+
+  dialog.open();
 };
 
 /**
@@ -965,9 +1214,9 @@ H5P.findCopyrights = function (info, parameters, contentId) {
  * @param {number} size.width
  * @param {number} size.height
  */
-H5P.openEmbedDialog = function ($element, embedCode, resizeCode, size) {
+H5P.openEmbedDialog = function ($element, embedCode, resizeCode, size, instance) {
   var fullEmbedCode = embedCode + resizeCode;
-  var dialog = new H5P.Dialog('embed', H5P.t('embed'), '<textarea class="h5p-embed-code-container" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>' + H5P.t('size') + ': <input type="text" value="' + size.width + '" class="h5p-embed-size"/> × <input type="text" value="' + size.height + '" class="h5p-embed-size"/> px<br/><div role="button" tabindex="0" class="h5p-expander">' + H5P.t('showAdvanced') + '</div><div class="h5p-expander-content"><p>' + H5P.t('advancedHelp') + '</p><textarea class="h5p-embed-code-container" autocorrect="off" autocapitalize="off" spellcheck="false">' + resizeCode + '</textarea></div>', $element);
+  var dialog = new H5P.Dialog('embed', H5P.t('embed'), '<textarea class="h5p-embed-code-container" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>' + H5P.t('size') + ': <input type="text" value="' + Math.ceil(size.width) + '" class="h5p-embed-size"/> × <input type="text" value="' + Math.ceil(size.height) + '" class="h5p-embed-size"/> px<br/><div role="button" tabindex="0" class="h5p-expander">' + H5P.t('showAdvanced') + '</div><div class="h5p-expander-content"><p>' + H5P.t('advancedHelp') + '</p><textarea class="h5p-embed-code-container" autocorrect="off" autocapitalize="off" spellcheck="false">' + resizeCode + '</textarea></div>', $element);
 
   // Selecting embed code when dialog is opened
   H5P.jQuery(dialog).on('dialog-opened', function (event, $dialog) {
@@ -975,15 +1224,7 @@ H5P.openEmbedDialog = function ($element, embedCode, resizeCode, size) {
     var $scroll = $inner.find('.h5p-scroll-content');
     var diff = $scroll.outerHeight() - $scroll.innerHeight();
     var positionInner = function () {
-      var height = $inner.height();
-      if ($scroll[0].scrollHeight + diff > height) {
-        $inner.css('height', ''); // 100%
-      }
-      else {
-        $inner.css('height', 'auto');
-        height = $inner.height();
-      }
-      $inner.css('marginTop', '-' + (height / 2) + 'px');
+      H5P.trigger(instance, 'resize');
     };
 
     // Handle changing of width/height
@@ -996,7 +1237,7 @@ H5P.openEmbedDialog = function ($element, embedCode, resizeCode, size) {
       }
       return Math.ceil(num);
     };
-    var updateEmbed = function () {
+    var updateEmbed = function () {
       $dialog.find('.h5p-embed-code-container:first').val(fullEmbedCode.replace(':w', getNum($w, size.width)).replace(':h', getNum($h, size.height)));
     };
 
@@ -1005,16 +1246,16 @@ H5P.openEmbedDialog = function ($element, embedCode, resizeCode, size) {
     updateEmbed();
 
     // Select text and expand textareas
-    $dialog.find('.h5p-embed-code-container').each(function(index, value) {
-      H5P.jQuery(this).css('height', this.scrollHeight + 'px').focus(function() {
-          H5P.jQuery(this).select();
-        });
+    $dialog.find('.h5p-embed-code-container').each(function () {
+      H5P.jQuery(this).css('height', this.scrollHeight + 'px').focus(function () {
+        H5P.jQuery(this).select();
+      });
     });
     $dialog.find('.h5p-embed-code-container').eq(0).select();
     positionInner();
 
     // Expand advanced embed
-    var expand = function () {
+    var expand = function () {
       var $expander = H5P.jQuery(this);
       var $content = $expander.next();
       if ($content.is(':visible')) {
@@ -1025,7 +1266,7 @@ H5P.openEmbedDialog = function ($element, embedCode, resizeCode, size) {
         $expander.addClass('h5p-open').text(H5P.t('hideAdvanced'));
         $content.show();
       }
-      $dialog.find('.h5p-embed-code-container').each(function(index, value) {
+      $dialog.find('.h5p-embed-code-container').each(function () {
         H5P.jQuery(this).css('height', this.scrollHeight + 'px');
       });
       positionInner();
@@ -1035,9 +1276,216 @@ H5P.openEmbedDialog = function ($element, embedCode, resizeCode, size) {
         expand.apply(this);
       }
     });
+  }).on('dialog-closed', function () {
+    H5P.trigger(instance, 'resize');
   });
 
   dialog.open();
+};
+
+/**
+ * Show a toast message.
+ *
+ * The reference element could be dom elements the toast should be attached to,
+ * or e.g. the document body for general toast messages.
+ *
+ * @param {DOM} element Reference element to show toast message for.
+ * @param {string} message Message to show.
+ * @param {object} [config] Configuration.
+ * @param {string} [config.style=h5p-toast] Style name for the tooltip.
+ * @param {number} [config.duration=3000] Toast message length in ms.
+ * @param {object} [config.position] Relative positioning of the toast.
+ * @param {string} [config.position.horizontal=centered] [before|left|centered|right|after].
+ * @param {string} [config.position.vertical=below] [above|top|centered|bottom|below].
+ * @param {number} [config.position.offsetHorizontal=0] Extra horizontal offset.
+ * @param {number} [config.position.offsetVertical=0] Extra vetical offset.
+ * @param {boolean} [config.position.noOverflowLeft=false] True to prevent overflow left.
+ * @param {boolean} [config.position.noOverflowRight=false] True to prevent overflow right.
+ * @param {boolean} [config.position.noOverflowTop=false] True to prevent overflow top.
+ * @param {boolean} [config.position.noOverflowBottom=false] True to prevent overflow bottom.
+ * @param {boolean} [config.position.noOverflowX=false] True to prevent overflow left and right.
+ * @param {boolean} [config.position.noOverflowY=false] True to prevent overflow top and bottom.
+ * @param {object} [config.position.overflowReference=document.body] DOM reference for overflow.
+ */
+H5P.attachToastTo = function (element, message, config) {
+  if (element === undefined || message === undefined) {
+    return;
+  }
+
+  const eventPath = function (evt) {
+    var path = (evt.composedPath && evt.composedPath()) || evt.path;
+    var target = evt.target;
+
+    if (path != null) {
+      // Safari doesn't include Window, but it should.
+      return (path.indexOf(window) < 0) ? path.concat(window) : path;
+    }
+
+    if (target === window) {
+      return [window];
+    }
+
+    function getParents(node, memo) {
+      memo = memo || [];
+      var parentNode = node.parentNode;
+
+      if (!parentNode) {
+        return memo;
+      }
+      else {
+        return getParents(parentNode, memo.concat(parentNode));
+      }
+    }
+
+    return [target].concat(getParents(target), window);
+  };
+
+  /**
+   * Handle click while toast is showing.
+   */
+  const clickHandler = function (event) {
+    /*
+     * A common use case will be to attach toasts to buttons that are clicked.
+     * The click would remove the toast message instantly without this check.
+     * Children of the clicked element are also ignored.
+     */
+    var path = eventPath(event);
+    if (path.indexOf(element) !== -1) {
+      return;
+    }
+    clearTimeout(timer);
+    removeToast();
+  };
+
+
+
+  /**
+   * Remove the toast message.
+   */
+  const removeToast = function () {
+    document.removeEventListener('click', clickHandler);
+    if (toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  };
+
+  /**
+   * Get absolute coordinates for the toast.
+   *
+   * @param {DOM} element Reference element to show toast message for.
+   * @param {DOM} toast Toast element.
+   * @param {object} [position={}] Relative positioning of the toast message.
+   * @param {string} [position.horizontal=centered] [before|left|centered|right|after].
+   * @param {string} [position.vertical=below] [above|top|centered|bottom|below].
+   * @param {number} [position.offsetHorizontal=0] Extra horizontal offset.
+   * @param {number} [position.offsetVertical=0] Extra vetical offset.
+   * @param {boolean} [position.noOverflowLeft=false] True to prevent overflow left.
+   * @param {boolean} [position.noOverflowRight=false] True to prevent overflow right.
+   * @param {boolean} [position.noOverflowTop=false] True to prevent overflow top.
+   * @param {boolean} [position.noOverflowBottom=false] True to prevent overflow bottom.
+   * @param {boolean} [position.noOverflowX=false] True to prevent overflow left and right.
+   * @param {boolean} [position.noOverflowY=false] True to prevent overflow top and bottom.
+   * @return {object}
+   */
+  const getToastCoordinates = function (element, toast, position) {
+    position = position || {};
+    position.offsetHorizontal = position.offsetHorizontal || 0;
+    position.offsetVertical = position.offsetVertical || 0;
+
+    const toastRect = toast.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+
+    let left = 0;
+    let top = 0;
+
+    // Compute horizontal position
+    switch (position.horizontal) {
+      case 'before':
+        left = elementRect.left - toastRect.width - position.offsetHorizontal;
+        break;
+      case 'after':
+        left = elementRect.left + elementRect.width + position.offsetHorizontal;
+        break;
+      case 'left':
+        left = elementRect.left + position.offsetHorizontal;
+        break;
+      case 'right':
+        left = elementRect.left + elementRect.width - toastRect.width - position.offsetHorizontal;
+        break;
+      case 'centered':
+        left = elementRect.left + elementRect.width / 2 - toastRect.width / 2 + position.offsetHorizontal;
+        break;
+      default:
+        left = elementRect.left + elementRect.width / 2 - toastRect.width / 2 + position.offsetHorizontal;
+    }
+
+    // Compute vertical position
+    switch (position.vertical) {
+      case 'above':
+        top = elementRect.top - toastRect.height - position.offsetVertical;
+        break;
+      case 'below':
+        top = elementRect.top + elementRect.height + position.offsetVertical;
+        break;
+      case 'top':
+        top = elementRect.top + position.offsetVertical;
+        break;
+      case 'bottom':
+        top = elementRect.top + elementRect.height - toastRect.height - position.offsetVertical;
+        break;
+      case 'centered':
+        top = elementRect.top + elementRect.height / 2 - toastRect.height / 2 + position.offsetVertical;
+        break;
+      default:
+        top = elementRect.top + elementRect.height + position.offsetVertical;
+    }
+
+    // Prevent overflow
+    const overflowElement = document.body;
+    const bounds = overflowElement.getBoundingClientRect();
+    if ((position.noOverflowLeft || position.noOverflowX) && (left < bounds.x)) {
+      left = bounds.x;
+    }
+    if ((position.noOverflowRight || position.noOverflowX) && ((left + toastRect.width) > (bounds.x + bounds.width))) {
+      left = bounds.x + bounds.width - toastRect.width;
+    }
+    if ((position.noOverflowTop || position.noOverflowY) && (top < bounds.y)) {
+      top = bounds.y;
+    }
+    if ((position.noOverflowBottom || position.noOverflowY) && ((top + toastRect.height) > (bounds.y + bounds.height))) {
+      left = bounds.y + bounds.height - toastRect.height;
+    }
+
+    return {left: left, top: top};
+  };
+
+  // Sanitization
+  config = config || {};
+  config.style = config.style || 'h5p-toast';
+  config.duration = config.duration || 3000;
+
+  // Build toast
+  const toast = document.createElement('div');
+  toast.setAttribute('id', config.style);
+  toast.classList.add('h5p-toast-disabled');
+  toast.classList.add(config.style);
+
+  const msg = document.createElement('span');
+  msg.innerHTML = message;
+  toast.appendChild(msg);
+
+  document.body.appendChild(toast);
+
+  // The message has to be set before getting the coordinates
+  const coordinates = getToastCoordinates(element, toast, config.position);
+  toast.style.left = Math.round(coordinates.left) + 'px';
+  toast.style.top = Math.round(coordinates.top) + 'px';
+
+  toast.classList.remove('h5p-toast-disabled');
+  const timer = setTimeout(removeToast, config.duration);
+
+  // The toast can also be removed by clicking somewhere
+  document.addEventListener('click', clickHandler);
 };
 
 /**
@@ -1067,6 +1515,17 @@ H5P.ContentCopyrights = function () {
   this.addMedia = function (newMedia) {
     if (newMedia !== undefined) {
       media.push(newMedia);
+    }
+  };
+
+  /**
+   * Add sub content in front.
+   *
+   * @param {H5P.MediaCopyright} newMedia
+   */
+  this.addMediaInFront = function (newMedia) {
+    if (newMedia !== undefined) {
+      media.unshift(newMedia);
     }
   };
 
@@ -1147,16 +1606,70 @@ H5P.MediaCopyright = function (copyright, labels, order, extraFields) {
   };
 
   /**
-   * Get humanized value for field.
+   * Get humanized value for the license field.
    *
    * @private
-   * @param {string} fieldName
-   * @param {string} value
+   * @param {string} license
+   * @param {string} [version]
    * @returns {string}
    */
-  var humanizeValue = function (fieldName, value) {
-    if (fieldName === 'license') {
-      return H5P.copyrightLicenses[value];
+  var humanizeLicense = function (license, version) {
+    var copyrightLicense = H5P.copyrightLicenses[license];
+
+    // Build license string
+    var value = '';
+    if (!(license === 'PD' && version)) {
+      // Add license label
+      value += (copyrightLicense.hasOwnProperty('label') ? copyrightLicense.label : copyrightLicense);
+    }
+
+    // Check for version info
+    var versionInfo;
+    if (copyrightLicense.versions) {
+      if (copyrightLicense.versions.default && (!version || !copyrightLicense.versions[version])) {
+        version = copyrightLicense.versions.default;
+      }
+      if (version && copyrightLicense.versions[version]) {
+        versionInfo = copyrightLicense.versions[version];
+      }
+    }
+
+    if (versionInfo) {
+      // Add license version
+      if (value) {
+        value += ' ';
+      }
+      value += (versionInfo.hasOwnProperty('label') ? versionInfo.label : versionInfo);
+    }
+
+    // Add link if specified
+    var link;
+    if (copyrightLicense.hasOwnProperty('link')) {
+      link = copyrightLicense.link.replace(':version', copyrightLicense.linkVersions ? copyrightLicense.linkVersions[version] : version);
+    }
+    else if (versionInfo && copyrightLicense.hasOwnProperty('link')) {
+      link = versionInfo.link;
+    }
+    if (link) {
+      value = '<a href="' + link + '" target="_blank">' + value + '</a>';
+    }
+
+    // Generate parenthesis
+    var parenthesis = '';
+    if (license !== 'PD' && license !== 'C') {
+      parenthesis += license;
+    }
+    if (version && version !== 'CC0 1.0') {
+      if (parenthesis && license !== 'GNU GPL') {
+        parenthesis += ' ';
+      }
+      parenthesis += version;
+    }
+    if (parenthesis) {
+      value += ' (' + parenthesis + ')';
+    }
+    if (license === 'C') {
+      value += ' &copy;';
     }
 
     return value;
@@ -1172,13 +1685,20 @@ H5P.MediaCopyright = function (copyright, labels, order, extraFields) {
 
     if (order === undefined) {
       // Set default order
-      order = ['title', 'author', 'year', 'source', 'license'];
+      order = ['contentType', 'title', 'license', 'author', 'year', 'source', 'licenseExtras', 'changes'];
     }
 
     for (var i = 0; i < order.length; i++) {
       var fieldName = order[i];
-      if (copyright[fieldName] !== undefined) {
-        list.add(new H5P.Field(getLabel(fieldName), humanizeValue(fieldName, copyright[fieldName])));
+      if (copyright[fieldName] !== undefined && copyright[fieldName] !== '') {
+        var humanValue = copyright[fieldName];
+        if (fieldName === 'license') {
+          humanValue = humanizeLicense(copyright.license, copyright.version);
+        }
+        if (fieldName === 'source') {
+          humanValue = (humanValue) ? '<a href="' + humanValue + '" target="_blank">' + humanValue + '</a>' : undefined;
+        }
+        list.add(new H5P.Field(getLabel(fieldName), humanValue));
       }
     }
   }
@@ -1201,7 +1721,7 @@ H5P.MediaCopyright = function (copyright, labels, order, extraFields) {
   this.undisclosed = function () {
     if (list.size() === 1) {
       var field = list.get(0);
-      if (field.getLabel() === getLabel('license') && field.getValue() === humanizeValue('license', 'U')) {
+      if (field.getLabel() === getLabel('license') && field.getValue() === humanizeLicense('U')) {
         return true;
       }
     }
@@ -1231,26 +1751,6 @@ H5P.MediaCopyright = function (copyright, labels, order, extraFields) {
 
     return html;
   };
-};
-
-/**
- * Maps copyright license codes to their human readable counterpart.
- *
- * @type {Object}
- */
-H5P.copyrightLicenses = {
-  'U': 'Undisclosed',
-  'CC BY': 'Attribution',
-  'CC BY-SA': 'Attribution-ShareAlike',
-  'CC BY-ND': 'Attribution-NoDerivs',
-  'CC BY-NC': 'Attribution-NonCommercial',
-  'CC BY-NC-SA': 'Attribution-NonCommercial-ShareAlike',
-  'CC BY-NC-ND': 'Attribution-NonCommercial-NoDerivs',
-  'GNU GPL': 'General Public License',
-  'PD': 'Public Domain',
-  'ODC PDDL': 'Public Domain Dedication and Licence',
-  'CC PDM': 'Public Domain Mark',
-  'C': 'Copyright'
 };
 
 /**
@@ -1386,7 +1886,8 @@ H5P.Coords = function (x, y, w, h) {
     this.y = x.y;
     this.w = x.w;
     this.h = x.h;
-  } else {
+  }
+  else {
     if (x !== undefined) {
       this.x = x;
     }
@@ -1413,13 +1914,13 @@ H5P.Coords = function (x, y, w, h) {
  *   return false if the library parameter is invalid
  */
 H5P.libraryFromString = function (library) {
-  var regExp = /(.+)\s(\d)+\.(\d)$/g;
+  var regExp = /(.+)\s(\d+)\.(\d+)$/g;
   var res = regExp.exec(library);
   if (res !== null) {
     return {
       'machineName': res[1],
-      'majorVersion': res[2],
-      'minorVersion': res[3]
+      'majorVersion': parseInt(res[2]),
+      'minorVersion': parseInt(res[3])
     };
   }
   else {
@@ -1436,7 +1937,13 @@ H5P.libraryFromString = function (library) {
  *   The full path to the library.
  */
 H5P.getLibraryPath = function (library) {
-  return H5PIntegration.url + '/libraries/' + library;
+  if (H5PIntegration.urlLibraries !== undefined) {
+    // This is an override for those implementations that has a different libraries URL, e.g. Moodle
+    return H5PIntegration.urlLibraries + '/' + library;
+  }
+  else {
+    return H5PIntegration.url + '/libraries/' + library;
+  }
 };
 
 /**
@@ -1544,7 +2051,8 @@ H5P.shuffleArray = function (array) {
  *   Reported time consumption/usage
  */
 H5P.setFinished = function (contentId, score, maxScore, time) {
-  if (H5PIntegration.postUserStatistics === true) {
+  var validScore = typeof score === 'number' || score instanceof Number;
+  if (validScore && H5PIntegration.postUserStatistics === true) {
     /**
      * Return unix timestamp for the given JS Date.
      *
@@ -1557,8 +2065,7 @@ H5P.setFinished = function (contentId, score, maxScore, time) {
     };
 
     // Post the results
-    // TODO: Should we use a variable with the complete path?
-    H5P.jQuery.post(H5PIntegration.ajaxPath + 'setFinished', {
+    H5P.jQuery.post(H5PIntegration.ajax.setFinished, {
       contentId: contentId,
       score: score,
       maxScore: maxScore,
@@ -1642,7 +2149,7 @@ H5P.on = function (instance, eventType, handler) {
  * @returns {string} UUID
  */
 H5P.createUUID = function () {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(char) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (char) {
     var random = Math.random()*16|0, newChar = char === 'x' ? random : (random&0x3|0x8);
     return newChar.toString(16);
   });
@@ -1692,6 +2199,12 @@ H5P.createTitle = function (rawTitle, maxLength) {
    * @param {boolean} [async=true]
    */
   function contentUserDataAjax(contentId, dataType, subContentId, done, data, preload, invalidate, async) {
+    if (H5PIntegration.user === undefined) {
+      // Not logged in, no use in saving.
+      done('Not signed in.');
+      return;
+    }
+
     var options = {
       url: H5PIntegration.ajax.contentUserData.replace(':contentId', contentId).replace(':dataType', dataType).replace(':subContentId', subContentId ? subContentId : 0),
       dataType: 'json',
@@ -1709,12 +2222,12 @@ H5P.createTitle = function (rawTitle, maxLength) {
       options.type = 'GET';
     }
     if (done !== undefined) {
-      options.error = function (xhr, error) {
+      options.error = function (xhr, error) {
         done(error);
       };
       options.success = function (response) {
         if (!response.success) {
-          done(response.error);
+          done(response.message);
           return;
         }
 
@@ -1747,9 +2260,10 @@ H5P.createTitle = function (rawTitle, maxLength) {
       subContentId = 0; // Default
     }
 
-    var content = H5PIntegration.contents['cid-' + contentId];
+    H5PIntegration.contents = H5PIntegration.contents || {};
+    var content = H5PIntegration.contents['cid-' + contentId] || {};
     var preloadedData = content.contentUserData;
-    if (preloadedData && preloadedData[subContentId] && preloadedData[subContentId][dataId]) {
+    if (preloadedData && preloadedData[subContentId] && preloadedData[subContentId][dataId] !== undefined) {
       if (preloadedData[subContentId][dataId] === 'RESET') {
         done(undefined, null);
         return;
@@ -1762,7 +2276,7 @@ H5P.createTitle = function (rawTitle, maxLength) {
       }
     }
     else {
-      contentUserDataAjax(contentId, dataId, subContentId, function (err, data) {
+      contentUserDataAjax(contentId, dataId, subContentId, function (err, data) {
         if (err || data === undefined) {
           done(err, data);
           return; // Error or no data
@@ -1786,6 +2300,19 @@ H5P.createTitle = function (rawTitle, maxLength) {
         }
       });
     }
+  };
+
+  /**
+   * Get crossorigin option that is set for site. Usefull for setting crossorigin policy for elements.
+   *
+   * @returns {string|null} Returns the string that should be set as crossorigin policy for elements or null if
+   * no policy is set.
+   */
+  H5P.getCrossOrigin = function (url) {
+    var crossorigin = H5PIntegration.crossorigin;
+    var urlRegex = H5PIntegration.crossoriginRegex;
+
+    return crossorigin && urlRegex && url.match(urlRegex) ? crossorigin : null;
   };
 
   /**
@@ -1835,6 +2362,9 @@ H5P.createTitle = function (rawTitle, maxLength) {
     }
 
     var content = H5PIntegration.contents['cid-' + contentId];
+    if (content === undefined) {
+      content = H5PIntegration.contents['cid-' + contentId] = {};
+    }
     if (!content.contentUserData) {
       content.contentUserData = {};
     }
@@ -1847,7 +2377,7 @@ H5P.createTitle = function (rawTitle, maxLength) {
     }
 
     preloadedData[options.subContentId][dataId] = data;
-    contentUserDataAjax(contentId, dataId, options.subContentId, function (error, data) {
+    contentUserDataAjax(contentId, dataId, options.subContentId, function (error) {
       if (options.errorCallback && error) {
         options.errorCallback(error);
       }
@@ -1878,8 +2408,304 @@ H5P.createTitle = function (rawTitle, maxLength) {
     contentUserDataAjax(contentId, dataId, subContentId, undefined, null);
   };
 
+  /**
+   * Function for getting content for a certain ID
+   *
+   * @param {number} contentId
+   * @return {Object}
+   */
+  H5P.getContentForInstance = function (contentId) {
+    var key = 'cid-' + contentId;
+    var exists = H5PIntegration && H5PIntegration.contents &&
+                 H5PIntegration.contents[key];
+
+    return exists ? H5PIntegration.contents[key] : undefined;
+  };
+
+  /**
+   * Prepares the content parameters for storing in the clipboard.
+   *
+   * @class
+   * @param {Object} parameters The parameters for the content to store
+   * @param {string} [genericProperty] If only part of the parameters are generic, which part
+   * @param {string} [specificKey] If the parameters are specific, what content type does it fit
+   * @returns {Object} Ready for the clipboard
+   */
+  H5P.ClipboardItem = function (parameters, genericProperty, specificKey) {
+    var self = this;
+
+    /**
+     * Set relative dimensions when params contains a file with a width and a height.
+     * Very useful to be compatible with wysiwyg editors.
+     *
+     * @private
+     */
+    var setDimensionsFromFile = function () {
+      if (!self.generic) {
+        return;
+      }
+      var params = self.specific[self.generic];
+      if (!params.params.file || !params.params.file.width || !params.params.file.height) {
+        return;
+      }
+
+      self.width = 20; // %
+      self.height = (params.params.file.height / params.params.file.width) * self.width;
+    };
+
+    if (!genericProperty) {
+      genericProperty = 'action';
+      parameters = {
+        action: parameters
+      };
+    }
+
+    self.specific = parameters;
+
+    if (genericProperty && parameters[genericProperty]) {
+      self.generic = genericProperty;
+    }
+    if (specificKey) {
+      self.from = specificKey;
+    }
+
+    if (window.H5PEditor && H5PEditor.contentId) {
+      self.contentId = H5PEditor.contentId;
+    }
+
+    if (!self.specific.width && !self.specific.height) {
+      setDimensionsFromFile();
+    }
+  };
+
+  /**
+   * Store item in the H5P Clipboard.
+   *
+   * @param {H5P.ClipboardItem|*} clipboardItem
+   */
+  H5P.clipboardify = function (clipboardItem) {
+    if (!(clipboardItem instanceof H5P.ClipboardItem)) {
+      clipboardItem = new H5P.ClipboardItem(clipboardItem);
+    }
+    H5P.setClipboard(clipboardItem);
+  };
+
+  /**
+   * Retrieve parsed clipboard data.
+   *
+   * @return {Object}
+   */
+  H5P.getClipboard = function () {
+    return parseClipboard();
+  };
+
+  /**
+   * Set item in the H5P Clipboard.
+   *
+   * @param {H5P.ClipboardItem|object} clipboardItem - Data to be set.
+   */
+  H5P.setClipboard = function (clipboardItem) {
+    localStorage.setItem('h5pClipboard', JSON.stringify(clipboardItem));
+
+    // Trigger an event so all 'Paste' buttons may be enabled.
+    H5P.externalDispatcher.trigger('datainclipboard', {reset: false});
+  };
+
+  /**
+   * Get config for a library
+   *
+   * @param string machineName
+   * @return Object
+   */
+  H5P.getLibraryConfig = function (machineName) {
+    var hasConfig = H5PIntegration.libraryConfig && H5PIntegration.libraryConfig[machineName];
+    return hasConfig ? H5PIntegration.libraryConfig[machineName] : {};
+  };
+
+  /**
+   * Get item from the H5P Clipboard.
+   *
+   * @private
+   * @return {Object}
+   */
+  var parseClipboard = function () {
+    var clipboardData = localStorage.getItem('h5pClipboard');
+    if (!clipboardData) {
+      return;
+    }
+
+    // Try to parse clipboard dat
+    try {
+      clipboardData = JSON.parse(clipboardData);
+    }
+    catch (err) {
+      console.error('Unable to parse JSON from clipboard.', err);
+      return;
+    }
+
+    // Update file URLs and reset content Ids
+    recursiveUpdate(clipboardData.specific, function (path) {
+      var isTmpFile = (path.substr(-4, 4) === '#tmp');
+      if (!isTmpFile && clipboardData.contentId) {
+        // Comes from existing content
+
+        if (H5PEditor.contentId) {
+          // .. to existing content
+          return '../' + clipboardData.contentId + '/' + path;
+        }
+        else {
+          // .. to new content
+          return (H5PEditor.contentRelUrl ? H5PEditor.contentRelUrl : '../content/') + clipboardData.contentId + '/' + path;
+        }
+      }
+      return path; // Will automatically be looked for in tmp folder
+    });
+
+
+    if (clipboardData.generic) {
+      // Use reference instead of key
+      clipboardData.generic = clipboardData.specific[clipboardData.generic];
+    }
+
+    return clipboardData;
+  };
+
+  /**
+   * Update file URLs and reset content IDs.
+   * Useful when copying content.
+   *
+   * @private
+   * @param {object} params Reference
+   * @param {function} handler Modifies the path to work when pasted
+   */
+  var recursiveUpdate = function (params, handler) {
+    for (var prop in params) {
+      if (params.hasOwnProperty(prop) && params[prop] instanceof Object) {
+        var obj = params[prop];
+        if (obj.path !== undefined && obj.mime !== undefined) {
+          obj.path = handler(obj.path);
+        }
+        else {
+          if (obj.library !== undefined && obj.subContentId !== undefined) {
+            // Avoid multiple content with same ID
+            delete obj.subContentId;
+          }
+          recursiveUpdate(obj, handler);
+        }
+      }
+    }
+  };
+
   // Init H5P when page is fully loadded
   $(document).ready(function () {
+
+    window.addEventListener('storage', function (event) {
+      // Pick up clipboard changes from other tabs
+      if (event.key === 'h5pClipboard') {
+        // Trigger an event so all 'Paste' buttons may be enabled.
+        H5P.externalDispatcher.trigger('datainclipboard', {reset: event.newValue === null});
+      }
+    });
+
+    var ccVersions = {
+      'default': '4.0',
+      '4.0': H5P.t('licenseCC40'),
+      '3.0': H5P.t('licenseCC30'),
+      '2.5': H5P.t('licenseCC25'),
+      '2.0': H5P.t('licenseCC20'),
+      '1.0': H5P.t('licenseCC10'),
+    };
+
+    /**
+     * Maps copyright license codes to their human readable counterpart.
+     *
+     * @type {Object}
+     */
+    H5P.copyrightLicenses = {
+      'U': H5P.t('licenseU'),
+      'CC BY': {
+        label: H5P.t('licenseCCBY'),
+        link: 'http://creativecommons.org/licenses/by/:version',
+        versions: ccVersions
+      },
+      'CC BY-SA': {
+        label: H5P.t('licenseCCBYSA'),
+        link: 'http://creativecommons.org/licenses/by-sa/:version',
+        versions: ccVersions
+      },
+      'CC BY-ND': {
+        label: H5P.t('licenseCCBYND'),
+        link: 'http://creativecommons.org/licenses/by-nd/:version',
+        versions: ccVersions
+      },
+      'CC BY-NC': {
+        label: H5P.t('licenseCCBYNC'),
+        link: 'http://creativecommons.org/licenses/by-nc/:version',
+        versions: ccVersions
+      },
+      'CC BY-NC-SA': {
+        label: H5P.t('licenseCCBYNCSA'),
+        link: 'http://creativecommons.org/licenses/by-nc-sa/:version',
+        versions: ccVersions
+      },
+      'CC BY-NC-ND': {
+        label: H5P.t('licenseCCBYNCND'),
+        link: 'http://creativecommons.org/licenses/by-nc-nd/:version',
+        versions: ccVersions
+      },
+      'CC0 1.0': {
+        label: H5P.t('licenseCC010'),
+        link: 'https://creativecommons.org/publicdomain/zero/1.0/'
+      },
+      'GNU GPL': {
+        label: H5P.t('licenseGPL'),
+        link: 'http://www.gnu.org/licenses/gpl-:version-standalone.html',
+        linkVersions: {
+          'v3': '3.0',
+          'v2': '2.0',
+          'v1': '1.0'
+        },
+        versions: {
+          'default': 'v3',
+          'v3': H5P.t('licenseV3'),
+          'v2': H5P.t('licenseV2'),
+          'v1': H5P.t('licenseV1')
+        }
+      },
+      'PD': {
+        label: H5P.t('licensePD'),
+        versions: {
+          'CC0 1.0': {
+            label: H5P.t('licenseCC010'),
+            link: 'https://creativecommons.org/publicdomain/zero/1.0/'
+          },
+          'CC PDM': {
+            label: H5P.t('licensePDM'),
+            link: 'https://creativecommons.org/publicdomain/mark/1.0/'
+          }
+        }
+      },
+      'ODC PDDL': '<a href="http://opendatacommons.org/licenses/pddl/1.0/" target="_blank">Public Domain Dedication and Licence</a>',
+      'CC PDM': {
+        label: H5P.t('licensePDM'),
+        link: 'https://creativecommons.org/publicdomain/mark/1.0/'
+      },
+      'C': H5P.t('licenseC'),
+    };
+
+    /**
+     * Indicates if H5P is embedded on an external page using iframe.
+     * @member {boolean} H5P.externalEmbed
+     */
+
+    // Relay events to top window. This must be done before H5P.init
+    // since events may be fired on initialization.
+    if (H5P.isFramed && H5P.externalEmbed === false) {
+      H5P.externalDispatcher.on('*', function (event) {
+        window.parent.H5P.externalDispatcher.trigger.call(this, event);
+      });
+    }
+
     /**
      * Prevent H5P Core from initializing. Must be overriden before document ready.
      * @member {boolean} H5P.preventInit
@@ -1891,32 +2717,35 @@ H5P.createTitle = function (rawTitle, maxLength) {
     }
 
     if (H5PIntegration.saveFreq !== false) {
+      // When was the last state stored
+      var lastStoredOn = 0;
       // Store the current state of the H5P when leaving the page.
-      H5P.$window.on('beforeunload', function () {
-        for (var i = 0; i < H5P.instances.length; i++) {
-          var instance = H5P.instances[i];
-          if (instance.getCurrentState instanceof Function ||
-              typeof instance.getCurrentState === 'function') {
-            var state = instance.getCurrentState();
-            if (state !== undefined) {
-              // Async is not used to prevent the request from being cancelled.
-              H5P.setUserData(instance.contentId, 'state', state, {deleteOnChange: true, async: false});
+      var storeCurrentState = function () {
+        // Make sure at least 250 ms has passed since last save
+        var currentTime = new Date().getTime();
+        if (currentTime - lastStoredOn > 250) {
+          lastStoredOn = currentTime;
+          for (var i = 0; i < H5P.instances.length; i++) {
+            var instance = H5P.instances[i];
+            if (instance.getCurrentState instanceof Function ||
+                typeof instance.getCurrentState === 'function') {
+              var state = instance.getCurrentState();
+              if (state !== undefined) {
+                // Async is not used to prevent the request from being cancelled.
+                H5P.setUserData(instance.contentId, 'state', state, {deleteOnChange: true, async: false});
+              }
             }
           }
         }
+      };
+      // iPad does not support beforeunload, therefore using unload
+      H5P.$window.one('beforeunload unload', function () {
+        // Only want to do this once
+        H5P.$window.off('pagehide beforeunload unload');
+        storeCurrentState();
       });
-    }
-
-    /**
-     * Indicates if H5P is embedded on an external page using iframe.
-     * @member {boolean} H5P.externalEmbed
-     */
-
-    // Relay events to top window.
-    if (H5P.isFramed && H5P.externalEmbed === false) {
-      H5P.externalDispatcher.on('*', function (event) {
-        window.top.H5P.externalDispatcher.trigger.call(this, event);
-      });
+      // pagehide is used on iPad when tabs are switched
+      H5P.$window.on('pagehide', storeCurrentState);
     }
   });
 

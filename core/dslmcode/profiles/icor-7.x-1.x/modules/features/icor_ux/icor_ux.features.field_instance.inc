@@ -10,7 +10,7 @@
 function icor_ux_field_default_field_instances() {
   $field_instances = array();
 
-  // Exported field_instance: 'node-poll-field_cis_course_ref'
+  // Exported field_instance: 'node-poll-field_cis_course_ref'.
   $field_instances['node-poll-field_cis_course_ref'] = array(
     'bundle' => 'poll',
     'default_value' => NULL,
@@ -64,7 +64,6 @@ function icor_ux_field_default_field_instances() {
           'action_on_edit' => 0,
           'fallback' => 'none',
           'providers' => array(
-            'og_context' => 1,
             'url' => 1,
           ),
           'skip_perm' => 0,
@@ -76,15 +75,13 @@ function icor_ux_field_default_field_instances() {
     'widget' => array(
       'active' => 1,
       'module' => 'options',
-      'settings' => array(
-        'apply_chosen' => 1,
-      ),
+      'settings' => array(),
       'type' => 'options_select',
-      'weight' => 1,
+      'weight' => 0,
     ),
   );
 
-  // Exported field_instance: 'node-timeline-field_cis_course_ref'
+  // Exported field_instance: 'node-timeline-field_cis_course_ref'.
   $field_instances['node-timeline-field_cis_course_ref'] = array(
     'bundle' => 'timeline',
     'default_value' => NULL,
@@ -144,7 +141,6 @@ function icor_ux_field_default_field_instances() {
           'action_on_edit' => 0,
           'fallback' => 'none',
           'providers' => array(
-            'og_context' => 1,
             'url' => 1,
           ),
           'skip_perm' => 0,
@@ -156,11 +152,9 @@ function icor_ux_field_default_field_instances() {
     'widget' => array(
       'active' => 1,
       'module' => 'options',
-      'settings' => array(
-        'apply_chosen' => 1,
-      ),
+      'settings' => array(),
       'type' => 'options_select',
-      'weight' => 1,
+      'weight' => 0,
     ),
   );
 

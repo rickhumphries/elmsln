@@ -24,7 +24,9 @@ timestamp(){
 
 # set the branch via passed in command
 if [ -z $1 ]; then
-  elmslnwarn "please select a branch you want to update (like master)"
+  elmslnwarn "Please select the code branch you want to update against (e.g. master, 0.9.x, etc)."
+  elmslnwarn "You may want to leave Leafy and perform 'git checkout tags/TAG NUMBER'  or 'git pull origin master' beforehand in order to be sure you have got the most recent code from Git."  
+  elmslnwarn "Please also check upgrades documentation page at https://github.com/elmsln/elmsln/blob/master/docs/development/upgrades/How-do-I-run-upgrades.md"
   read branch
   if [ -z $branch ]; then
     exit 1
@@ -35,21 +37,21 @@ fi
 
 # allow for lazy people like btopro who enter yes via commandline
 if [ -z $2 ]; then
-  elmslnecho "Are you sure you want to upgrade the entire network? (Type yes)"
+  elmslnecho "Are you sure you want to upgrade the entire network? This will take several minutes and cause a temporary, rolling outage to the system until complete. (Type yes)"
   read yesprompt
 else
   yesprompt=$2
 fi
 # ensure they type yes, this is a big deal command
 if [ "$yesprompt" != "yes" ]; then
-  elmslnwarn "please type yes to execute the script, exited early"
+  elmslnwarn "Please type yes to execute the script, exited early"
   exit 1
 fi
 
 #prevent the script from being run more than once
 if [ -f /tmp/elmsln-upgrade-lock ]; then
   elmslnwarn 'elmsln-upgrade-lock is in place, this command must have failed previously or is currently running.'
-  elmslnwarn "in order to override this manually you'll have to run rm /tmp/elmsln-upgrade-lock"
+  elmslnwarn "in order to override this manually you'll have to run: sudo rm /tmp/elmsln-upgrade-lock and try again"
   exit 1
 fi
 # touch the lock to start off the job

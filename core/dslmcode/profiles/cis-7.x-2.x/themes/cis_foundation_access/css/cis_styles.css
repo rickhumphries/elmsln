@@ -1,1 +1,25 @@
 /* CSS Document */
+.views-exposed-form .views-exposed-widget {
+  float: none;
+  padding: 0;
+  margin: 0;
+}
+
+.avatar-name.lrnapp-canvas-listing {
+  display: inline-flex;
+}
+.lrnapp-canvas-listing span.heading span {
+  display: inline-flex;
+  font-weight: bold;
+  margin: 1em;
+  padding: .5em;
+}
+
+.service-confirm-icon paper-avatar {
+  width: 4em;
+  height: 4em;
+}
+.service-confirm-icon paper-avatar #jdenticon.paper-avatar {
+  width: 4em;
+  height: 4em;
+}

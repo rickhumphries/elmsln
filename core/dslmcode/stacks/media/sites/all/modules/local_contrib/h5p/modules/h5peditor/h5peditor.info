@@ -7,13 +7,15 @@ core = 7.x
 
 dependencies[] = h5p
 files[] = h5peditor-drupal-storage.class.inc
+files[] = h5peditor-drupal-ajax.class.inc
 files[] = h5peditor/h5peditor-file.class.php
+files[] = h5peditor/h5peditor-ajax.class.php
 files[] = h5peditor/h5peditor-storage.interface.php
+files[] = h5peditor/h5peditor-ajax.interface.php
 files[] = h5peditor/h5peditor.class.php
 
-; Information added by Drupal.org packaging script on 2015-06-08
-version = "7.x-1.8"
+; Information added by Drupal.org packaging script on 2019-03-26
+version = "7.x-1.43"
 core = "7.x"
 project = "h5p"
-datestamp = "1433766787"
-
+datestamp = "1553605625"

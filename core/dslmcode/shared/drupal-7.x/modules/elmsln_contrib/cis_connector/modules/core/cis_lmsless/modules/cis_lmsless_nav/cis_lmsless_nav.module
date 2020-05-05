@@ -1,0 +1,137 @@
+<?php
+
+/**
+ * @file
+ * Add custom menu items to LMS-less bar
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function cis_lmsless_nav_menu() {
+  $items['admin/config/user-interface/cis-lmsless-nav'] = array(
+    'title' => 'Edit network links',
+    'description' => t('Add custom menu links to the LMS-less navigation'),
+    'access arguments' => array('administer cis lms-less nav'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cis_lmsless_nav_parent_form'),
+    'file' => 'cis_lmsless_nav_parent_form.inc',
+    'menu_name' => 'menu-elmsln-settings',
+    'weight' => 10,
+  );
+  $items['admin/config/user-interface/cis-lmsless-nav/add-link'] = array(
+    'title' => 'ELMSLN Network: add link',
+    'access arguments' => array('administer cis lms-less nav'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cis_lmsless_nav_admin_add_link_form'),
+    'file' => 'cis_lmsless_nav.admin.inc',
+  );
+  $items['admin/config/user-interface/cis-lmsless-nav/edit-link/%'] = array(
+    'title' => 'ELMSLN Network: edit link',
+    'access arguments' => array('administer cis lms-less nav'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cis_lmsless_nav_admin_edit_link_form', 5),
+    'file' => 'cis_lmsless_nav.admin.inc',
+  );
+  $items['admin/config/user-interface/cis-lmsless-nav/delete-link/%'] = array(
+    'title' => 'ELMSLN Network: delete link',
+    'access arguments' => array('administer cis lms-less nav'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cis_lmsless_nav_admin_delete_link_form', 5),
+    'file' => 'cis_lmsless_nav.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function cis_lmsless_nav_permission() {
+  return array(
+    'administer cis lms-less nav' =>  array(
+      'title' => t('Administer LMS-less Navigation'),
+      'description' => t('Add custom menu links to the LMS-less navigation.'),
+    ),
+  );
+}
+
+function cis_lmsless_nav_theme() {
+  return array(
+    'cis_lmsless_nav_parent_form' => array(
+      'render element' => 'form',
+      'file' => 'cis_lmsless_nav_parent_form.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function cis_lmsless_nav_admin_paths() {
+  $paths = array(
+    'admin/config/user-interface/cis-lmsless-nav' => FALSE,
+    'admin/config/user-interface/cis-lmsless-nav/*' => FALSE,
+  );
+  return $paths;
+}
+
+/**
+ * Implements hook_cis_lmsless_theme_vars_alter()
+ */
+function cis_lmsless_nav_cis_lmsless_theme_vars_alter(&$vars) {
+  $cis_lmsless_nav_links = variable_get('cis_lmsless_nav_links', NULL);
+  if ($cis_lmsless_nav_links) {
+    foreach ($cis_lmsless_nav_links as $key => $link) {
+      if (isset($vars['services'])) {
+        // make sure we are not overriding a current link
+        if (!isset($vars['services'][$link['group']][$link['title']])) {
+          $vars['services'][$link['group']][$link['title']] = array(
+            'title' => t($link['title']),
+            'url' => $link['path'],
+            'machine_name' => $link['machine_name'],
+            'icon_library' => $link['icon_library'],
+            'distro' => '_default_',
+            'icon' => $link['machine_name'],
+            'weight' => (5 + $key),
+          );
+        }
+      }
+      elseif (isset($vars['network']['services'])) {
+        // make sure we are not overriding a current link
+        if (!isset($vars['network']['services'][$link['group']][$link['title']])) {
+          $vars['network']['services'][$link['group']][$link['title']] = array(
+            'title' => t($link['title']),
+            'url' => $link['path'],
+            'machine_name' => $link['machine_name'],
+            'distro' => '_default_',
+            'icon_library' => $link['icon_library'],
+            'icon' => $link['machine_name'],
+            'weight' => (5 + $key),
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Helper function to set nav values network wide
+ * @param  array $values an array of nav link values
+ */
+function _cis_lmsless_set_nav($values) {
+  // save local
+  variable_set('cis_lmsless_nav_links', $values);
+  // now remote
+  $requests = array(
+    array(
+      'elmsln_module' => 'elmsln_api',
+      'elmsln_callback' => 'vset',
+      'name' => 'cis_lmsless_nav_links',
+      'value' => $values,
+    ),
+  );
+  // rebuild these requests for the active network
+  _elmsln_api_network_request($requests, '1', TRUE);
+  drupal_set_message(t('Links have been successfully updated.'), 'toast', FALSE);
+}

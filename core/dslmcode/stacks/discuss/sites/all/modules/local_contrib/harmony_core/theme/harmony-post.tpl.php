@@ -45,7 +45,7 @@ $links = render($content['links']);
   </div>
   <div class="clearfix">
     <div class="post-left post-user-profile text-center">
-      <?php print $user_profile; ?>
+      <a href="#" tabindex="-1"><?php print $username; ?></a>
     </div>
     <div class="post-content post-left-offset">
       <?php print render($content); ?>
@@ -61,7 +61,7 @@ $links = render($content['links']);
     </div>
   </div>
 </div>
-<?php if ($is_page): ?>
+<?php if ($is_page && $belongs_to_thread): ?>
 <div class="post-return">
   <a href="<?php print $thread_post_url; ?>"><?php print t('Return to thread'); ?></a>
 </div>

@@ -10,7 +10,7 @@
 function mooc_page_field_default_field_bases() {
   $field_bases = array();
 
-  // Exported field_base: 'body'
+  // Exported field_base: 'body'.
   $field_bases['body'] = array(
     'active' => 1,
     'cardinality' => 1,
@@ -34,7 +34,7 @@ function mooc_page_field_default_field_bases() {
     'type' => 'text_with_summary',
   );
 
-  // Exported field_base: 'field_cis_tag'
+  // Exported field_base: 'field_cis_tag'.
   $field_bases['field_cis_tag'] = array(
     'active' => 1,
     'cardinality' => 1,
@@ -52,6 +52,29 @@ function mooc_page_field_default_field_bases() {
       'cis_connector_access' => FALSE,
       'cis_connector_disable' => FALSE,
       'max_length' => 30,
+    ),
+    'translatable' => 0,
+    'type' => 'text',
+  );
+
+  // Exported field_base: 'field_elmsln_competency'.
+  $field_bases['field_elmsln_competency'] = array(
+    'active' => 1,
+    'cardinality' => 1,
+    'deleted' => 0,
+    'entity_types' => array(),
+    'field_name' => 'field_elmsln_competency',
+    'indexes' => array(
+      'format' => array(
+        0 => 'format',
+      ),
+    ),
+    'locked' => 0,
+    'module' => 'text',
+    'settings' => array(
+      'cis_connector_access' => FALSE,
+      'cis_connector_disable' => FALSE,
+      'max_length' => 255,
     ),
     'translatable' => 0,
     'type' => 'text',

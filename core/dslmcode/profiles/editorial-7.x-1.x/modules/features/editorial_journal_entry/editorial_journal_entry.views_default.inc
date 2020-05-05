@@ -22,10 +22,14 @@ function editorial_journal_entry_views_default_views() {
 
   /* Display: Master */
   $handler = $view->new_display('default', 'Master', 'default');
-  $handler->display->display_options['title'] = 'My Journal';
+  $handler->display->display_options['title'] = 'My Writing Exercises';
   $handler->display->display_options['use_more_always'] = FALSE;
   $handler->display->display_options['access']['type'] = 'perm';
-  $handler->display->display_options['cache']['type'] = 'none';
+  $handler->display->display_options['cache']['type'] = 'time';
+  $handler->display->display_options['cache']['results_lifespan'] = '3600';
+  $handler->display->display_options['cache']['results_lifespan_custom'] = '0';
+  $handler->display->display_options['cache']['output_lifespan'] = '3600';
+  $handler->display->display_options['cache']['output_lifespan_custom'] = '0';
   $handler->display->display_options['query']['type'] = 'views_query';
   $handler->display->display_options['exposed_form']['type'] = 'basic';
   $handler->display->display_options['pager']['type'] = 'none';
@@ -59,10 +63,10 @@ function editorial_journal_entry_views_default_views() {
   $handler = $view->new_display('page', 'Page', 'page');
   $handler->display->display_options['path'] = 'editorial/writing-exercises';
   $handler->display->display_options['menu']['type'] = 'normal';
-  $handler->display->display_options['menu']['title'] = 'My Journal';
+  $handler->display->display_options['menu']['title'] = 'My Writing Exercises';
   $handler->display->display_options['menu']['description'] = 'Your personal class journal for completing exercises';
   $handler->display->display_options['menu']['weight'] = '-10';
-  $handler->display->display_options['menu']['name'] = 'menu-editorial-navigation';
+  $handler->display->display_options['menu']['name'] = 'menu-elmsln-navigation';
   $handler->display->display_options['menu']['context'] = 0;
   $handler->display->display_options['menu']['context_only_inline'] = 0;
   $export['editorial_exercise_list'] = $view;
@@ -82,7 +86,11 @@ function editorial_journal_entry_views_default_views() {
   $handler->display->display_options['title'] = 'My Journal entries';
   $handler->display->display_options['use_more_always'] = FALSE;
   $handler->display->display_options['access']['type'] = 'perm';
-  $handler->display->display_options['cache']['type'] = 'none';
+  $handler->display->display_options['cache']['type'] = 'time';
+  $handler->display->display_options['cache']['results_lifespan'] = '3600';
+  $handler->display->display_options['cache']['results_lifespan_custom'] = '0';
+  $handler->display->display_options['cache']['output_lifespan'] = '3600';
+  $handler->display->display_options['cache']['output_lifespan_custom'] = '0';
   $handler->display->display_options['query']['type'] = 'views_query';
   $handler->display->display_options['exposed_form']['type'] = 'basic';
   $handler->display->display_options['pager']['type'] = 'full';
@@ -107,18 +115,20 @@ function editorial_journal_entry_views_default_views() {
   $handler->display->display_options['fields']['title']['label'] = '';
   $handler->display->display_options['fields']['title']['alter']['word_boundary'] = FALSE;
   $handler->display->display_options['fields']['title']['alter']['ellipsis'] = FALSE;
-  /* Field: Content: Body */
-  $handler->display->display_options['fields']['body']['id'] = 'body';
-  $handler->display->display_options['fields']['body']['table'] = 'field_data_body';
-  $handler->display->display_options['fields']['body']['field'] = 'body';
-  $handler->display->display_options['fields']['body']['label'] = '';
-  $handler->display->display_options['fields']['body']['alter']['more_link'] = TRUE;
-  $handler->display->display_options['fields']['body']['alter']['trim'] = TRUE;
-  $handler->display->display_options['fields']['body']['alter']['html'] = TRUE;
-  $handler->display->display_options['fields']['body']['element_label_colon'] = FALSE;
-  $handler->display->display_options['fields']['body']['settings'] = array(
+  /* Field: Content: Journal Entry */
+  $handler->display->display_options['fields']['field_journal_entry']['id'] = 'field_journal_entry';
+  $handler->display->display_options['fields']['field_journal_entry']['table'] = 'field_data_field_journal_entry';
+  $handler->display->display_options['fields']['field_journal_entry']['field'] = 'field_journal_entry';
+  $handler->display->display_options['fields']['field_journal_entry']['label'] = '';
+  $handler->display->display_options['fields']['field_journal_entry']['element_type'] = '0';
+  $handler->display->display_options['fields']['field_journal_entry']['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields']['field_journal_entry']['element_wrapper_type'] = '0';
+  $handler->display->display_options['fields']['field_journal_entry']['element_default_classes'] = FALSE;
+  $handler->display->display_options['fields']['field_journal_entry']['type'] = 'text_trimmed';
+  $handler->display->display_options['fields']['field_journal_entry']['settings'] = array(
     'trim_length' => '600',
   );
+  $handler->display->display_options['fields']['field_journal_entry']['field_api_classes'] = TRUE;
   /* Sort criterion: Content: Post date */
   $handler->display->display_options['sorts']['created']['id'] = 'created';
   $handler->display->display_options['sorts']['created']['table'] = 'node';
@@ -162,7 +172,7 @@ function editorial_journal_entry_views_default_views() {
   $handler->display->display_options['menu']['type'] = 'normal';
   $handler->display->display_options['menu']['title'] = 'My Journal';
   $handler->display->display_options['menu']['weight'] = '0';
-  $handler->display->display_options['menu']['name'] = 'menu-editorial-navigation';
+  $handler->display->display_options['menu']['name'] = 'menu-elmsln-navigation';
   $handler->display->display_options['menu']['context'] = 0;
   $handler->display->display_options['menu']['context_only_inline'] = 0;
   $export['editorial_journal_entries'] = $view;

@@ -1,0 +1,21 @@
+{
+  "name": "elmsmedia-upload",
+  "short_name": "elmsmedia-upload",
+  "description": "Show all media for a course",
+  "start_url": "/",
+  "display": "standalone",
+  "app_integration": {
+    "element": "node_modules/@lrnwebcomponents/elmsln-apps/lib/elmsmedia-upload/elmsmedia-upload.js",
+    "block": true,
+    "title": "Media upload",
+    "endpoints": {
+      "data": {
+        "callback": "_elmsln_core_elmsmedia_upload",
+        "property": "upload-path"
+      }
+    },
+    "context": {
+      "distro": "elmsmedia"
+    }
+  }
+}

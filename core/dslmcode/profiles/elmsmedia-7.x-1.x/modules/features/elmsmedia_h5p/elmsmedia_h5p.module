@@ -1,13 +1,149 @@
 <?php
 /**
  * @file
- * Drupal needs this blank file.
+ * Code for the ELMSMedia H5P feature.
  */
 
+include_once 'elmsmedia_h5p.features.inc';
+include_once DRUPAL_ROOT . '/sites/all/modules/elmsln_contrib/webcomponents/WebComponentsService.php';
 
 /**
  * Implements hook_page_build().
  */
 function elmsmedia_h5p_page_build(&$page) {
   drupal_add_css(drupal_get_path('module', 'elmsmedia_h5p') . '/elmsmedia_h5p.css', array('group' => CSS_THEME, 'weight' => 1000));
+  // allow for h5p tincan bridge to still work when in entity iframe mode
+  if (arg(0) == 'entity_iframe' && arg(1) == 'node') {
+    $data = array(
+      'h5pTincanBridge' => array(
+        'nid' => arg(2),
+        'token' => drupal_get_token(),
+        'relayUrl' => base_path() . H5P_TINCAN_BRIDGE__RELAY_URL,
+        'reduceStatements' => H5P_TINCAN_BRIDGE__REDUCE_STATEMENTS,
+      )
+    );
+    drupal_add_js($data, 'setting');
+    // our custom event listener for frame events talking to this domain
+    // this helps us provide context of where the interaction was in use at
+    // the time of display
+    drupal_add_js(drupal_get_path('module', 'elmsmedia_h5p') . '/js/elmsmedia-xapi-listener.js', array('weight' => -1000));
+    drupal_add_js(drupal_get_path('module', 'h5p_tincan_bridge') . '/h5p_tincan_bridge.js', array('weight' => 1000));
+  }
+}
+
+/**
+ * Implements hook_embedded_h5p_alter().
+ */
+function elmsmedia_h5p_embedded_h5p_alter(&$head, $node) {
+  // append domain partcial if we can for avoiding XSS blocking on same origin root
+  if ($domain = _cis_connector_parent_domain()) {
+    $head .= "\n" . '<script>document.domain = "' . $domain . '"</script>';
+  }
+  // @todo appends this stuff to the head like a normal web components domain
+  $location = variable_get('webcomponents_project_location', 'sites/all/libraries/webcomponents/');
+  // append base_path if this site has a url to start it
+  if (strpos($location, 'http') === FALSE) {
+    $location = base_path() . $location;
+  }
+  // load webcomponentsjs polyfill library if it exists
+  $wc = new WebComponentsService();
+  $head .= $wc->applyWebcomponents($location);
+}
+
+/**
+ * Implements hook_replicate_ui_access_check_alter().
+ */
+function elmsmedia_h5p_replicate_ui_access_check_alter(&$access, $type, $entity) {
+  // H5p can't be replicated as its too complex to do via this manner
+  if ($type == 'node' && $entity->type == 'h5p_content') {
+    $access = FALSE;
+  }
+}
+
+/**
+ * Implements hook_h5p_filtered_params_alter
+ *
+ * Replace H5P's text filter with Drupal's xss filter.
+ */
+function elmsmedia_h5p_h5p_filtered_params_alter(&$filtered) {
+  _elmsmedia_h5p_recursively_add_drupal_filter($filtered);
+}
+
+function _elmsmedia_h5p_recursively_add_drupal_filter(&$fields) {
+  // make sure that we are either an object or an array
+  if (is_object($fields) || is_array($fields)) {
+    // loop through the object or array to attempt to find a text field.
+    // if we find an object or an array then we need to run through this
+    // function again.
+    foreach ($fields as $key => &$field) {
+      if (is_object($field)) {
+        _elmsmedia_h5p_recursively_add_drupal_filter($field);
+      }
+      else if (is_array($field)) {
+        _elmsmedia_h5p_recursively_add_drupal_filter($field);
+      }
+      else {
+        // if this is of type string, run it through the drupal filter
+        if (gettype($field) == 'string') {
+          _elmsmedia_h5p_add_drupal_filter($field);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements elmsmedia_h5p_allowed_tags_alter().
+ */
+function elmsmedia_h5p_h5p_allowed_tags_alter(&$allowed_tags) {
+  $allowed_tags = array_merge($allowed_tags, _webcomponents_all_tags());
+}
+
+/**
+ * Assemble (and static cache cause it's called a lot on) allowed tags.
+ */
+function _elmsmedia_h5p_allowed_tags() {
+  $allowed_tags = &drupal_static(__FUNCTION__);
+  if (!$allowed_tags) {
+    // Get the list of allowed tags
+    $allowed_tags = variable_get('elmsmedia_h5p_allowed_tags', array('a', 'em', 'strong', 'cite', 'code', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'p', 'div', 'h2', 'h3', 'sup', 'sub'));
+    $allowed_tags = _elmsmedia_variable_formatter($allowed_tags);
+    drupal_alter('h5p_allowed_tags', $allowed_tags);
+  }
+  return $allowed_tags;
+}
+
+/**
+ * [_elmsmedia_h5p_add_drupal_filter description]
+ */
+function _elmsmedia_h5p_add_drupal_filter(&$field) {
+  $allowed_tags = _elmsmedia_h5p_allowed_tags();
+
+  $value = '';
+  // decode H5P's escaping
+  $value = html_entity_decode($field);
+  // run it through drupal's xss filter but whitelist our allowed tags
+  $value = filter_xss($value, $allowed_tags);
+  $field = $value;
+}
+
+/**
+ * Helper function to format the form values to variable arrays
+ * @param  [mixed: string or array] Either array or comma separated string that will be converted an array.
+ * @return [array]
+ */
+function _elmsmedia_variable_formatter($variable) {
+  $array = array();
+  if (is_string($variable)) {
+    // trim the whitespace from the attributes
+    $variable = explode(',', $variable);
+    foreach ($variable as $key => $value) {
+      $array[$key] = trim($value);
+    }
+  }
+  elseif (is_array($variable)) {
+    $array = $variable;
+  }
+
+  return $array;
 }

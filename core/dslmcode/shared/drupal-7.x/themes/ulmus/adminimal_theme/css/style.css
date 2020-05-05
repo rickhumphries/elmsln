@@ -22,12 +22,20 @@ body.adminimal-theme *::-moz-focus-inner {
   border: 0;
 }
 
+* {-webkit-overflow-scrolling: touch;}
+
 body.adminimal-theme * {
-  -moz-box-sizing: inherit;
-  -webkit-box-sizing: inherit;
-  box-sizing: inherit;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -moz-box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+body.adminimal-theme .panel-panel {
+  -moz-box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 body {
@@ -677,7 +685,8 @@ table.system-status-report tr.warning {
 /* Fieldsets */
 fieldset {
   border: solid 1px #ddd;
-  border-top: 3px solid #0074BD;
+  border-top: none;
+  box-shadow: 0px -3px 0 #0074BD;
   padding: 12px;
   margin: 0 0 20px;
 }
@@ -763,6 +772,7 @@ input.empty {
 /* Filter */
 .filter-wrapper {
   border-top: 0;
+  box-shadow: none;
   padding: 10px 2px;
 }
 
@@ -992,7 +1002,7 @@ ul.action-links li {
 
 ul.action-links a {
   padding-left: 15px;/* LTR */
-  font: "Open Sans", "Segoe UI", "Helvetica", sans-serif;
+  font-family: "Open Sans", "Segoe UI", "Helvetica", sans-serif;
   font-size: 23px;
   font-weight: 300;
   background: transparent url(../images/add.png) no-repeat 0 center;
@@ -1640,6 +1650,11 @@ body.adminimal-theme .views-admin .icon {
   width: 16px;
 }
 
+body.adminimal-theme .views-admin .views-field-excluded,
+body.adminimal-theme .views-admin .views-display-disabled-link {
+  opacity: .5;
+}
+
 #simplenews-admin-filter .spacer {
   float: left;
   margin-top: 10px;
@@ -1769,7 +1784,6 @@ body.adminimal-theme .token-tree th {
 }
 
 .ui-widget table th {
-  text-align: center;
   font-weight: bold;
   font-size: 12px;
 }
@@ -1779,9 +1793,11 @@ body.adminimal-theme .token-tree th {
   background: white;
   padding: 0;
   margin: 0;
+  width: auto;
 }
 
-.ui-widget table thead th {
+.ui-widget table thead th,
+.mac .ui-widget table thead th {
   background: #555;
   color: white;
 }
@@ -2021,7 +2037,6 @@ div.ui-dialog.ui-widget.ui-widget-content.ui-corner-all.media-wrapper {
     color: #111;
     border: none;
     font-size: 16px;
-    line-height: 8px;
     margin: 0;
     padding: 10px 20px;
 }
@@ -2128,228 +2143,6 @@ body.adminimal-theme div.dev-query {
 
 body.adminimal-theme div.dev-query strong {
   color: #FFE414;
-}
-
-
-/* Ckeditor Styling */
-
-body.adminimal-theme .cke_reset_all,body.adminimal-theme  .cke_reset_all * {
-  border-radius: 0;
-  font-family: "Open Sans", "Segoe UI", "Helvetica", sans-serif;
-  text-shadow: none;
-}
-
-body.adminimal-theme .ckeditor_links {
-  border-left: 1px solid #DDDDDD;
-  border-right: 1px solid #DDDDDD;
-  display: block;
-  padding: 10px;
-  width: auto;
-}
-
-body.adminimal-theme .ckeditor_links:hover {
-  background: #eee;
-  text-decoration: none;
-}
-
-body.adminimal-theme .cke_chrome {
-  box-shadow: none;
-}
-
-body.adminimal-theme .cke_top {
-  background: #eee;
-}
-
-body.adminimal-theme .cke_toolgroup {
-  background: #fff;
-  border: 1px solid #ccc;
-}
-
-
-body.adminimal-theme .cke_combo_button {
-  background: #fff;
-  border: 1px solid #ccc;
-}
-
-body.adminimal-theme .cke_combo_off a.cke_combo_button:hover {
-  background: #fff;
-  border: 1px solid #0074BD;
-}
-
-body.adminimal-theme .cke_button_on {
-  background: #fff;
-  box-shadow: 0px 3px 0px #0074BD;
-  -moz-border-radius: 0;
-  -webkit-border-radius: 0;
-  border-radius: 0;
-}
-
-body.adminimal-theme .cke_button_on:hover {
-  box-shadow: 0px 3px 0px #0074BD;
-}
-
-body.adminimal-theme .cke_bottom {
-  background: #eee;
-}
-
-body.adminimal-theme .cke_combo_off a.cke_combo_button:active,body.adminimal-theme  .cke_combo_on a.cke_combo_button {
-  border: 1px solid #0074BD;
-  border-bottom-width: 3px;
-  background: #fff;
-  box-shadow: none;
-}
-
-body.adminimal-theme a.cke_button_on:hover,
-body.adminimal-theme a.cke_button_on:focus,
-body.adminimal-theme a.cke_button_on:active,
-body.adminimal-theme .cke_button:first-child,
-body.adminimal-theme .cke_button:last-child {
-  -moz-border-radius: 0;
-  -webkit-border-radius: 0;
-  border-radius: 0;
-}
-
-body.adminimal-theme a.cke_button_off:hover,
-body.adminimal-theme a.cke_button_off:focus, a.cke_button_off:active,
-body.adminimal-theme a.cke_button_disabled:hover,
-body.adminimal-theme a.cke_button_disabled:focus,
-body.adminimal-theme a.cke_button_disabled:active {
-  background: #eee;
-  box-shadow: none;
-  border-color: #0074BD;
-  -moz-border-radius: 0;
-  -webkit-border-radius: 0;
-  border-radius: 0;
-}
-
-body.adminimal-theme .cke_reset_all label {
-  display: inline-block;
-  margin-top: 5px;
-  padding-bottom: 2px;
-  position: relative;
-}
-
-body.adminimal-theme .cke_dialog_body label.cke_required {
-  font-weight: normal;
-}
-
-body.adminimal-theme .cke_reset_all .cke_dialog_body {
-  font-family: "Open Sans", "Segoe UI", "Helvetica", sans-serif;
-  border: 1px solid #CCCCCC;
-}
-
-body.adminimal-theme .cke_reset_all fieldset {
-  border: 1px solid #DDDDDD;
-  border-top: 3px solid #0074BD;
-  padding: 10px;
-}
-
-body.adminimal-theme .cke_reset_all legend {
-  font-family: "Open Sans", "Segoe UI", "Helvetica", sans-serif;
-  font-size: 18px;
-  font-weight: 100;
-  padding: 0 0.5em;
-}
-
-body.adminimal-theme .cke_combopanel {
-  height: 170px;
-  width: 170px;
-  border: 1px solid #DDDDDD;
-  margin-top: 3px;
-}
-
-body.adminimal-theme .cke_dialog_footer {
-  background: #eee;
-}
-
-body.adminimal-theme a.cke_dialog_tab:hover {
-  text-decoration: none;
-  background: #fff;
-  color: #0074BD;
-}
-
-body.adminimal-theme select.cke_dialog_ui_input_select {
-  box-shadow: none;
-}
-
-body.adminimal-theme input.cke_dialog_ui_input_text,
-body.adminimal-theme input.cke_dialog_ui_input_password,
-body.adminimal-theme textarea.cke_dialog_ui_input_textarea {
-  box-shadow: none;
-  border-color: #CCCCCC;
-}
-
-body.adminimal-theme .cke_dialog_title {
-  background: #333333;
-  border-bottom: none;
-  border-radius: 0;
-  box-shadow: none;
-  color: #FFFFFF;
-  font-size: 18px;
-  text-shadow: none;
-}
-
-body.adminimal-theme .cke_dialog_ui_vbox_child label {
-  top: -2px;
-}
-
-body.adminimal-theme input.cke_dialog_ui_input_text:focus,
-body.adminimal-theme input.cke_dialog_ui_input_password:focus,
-body.adminimal-theme textarea.cke_dialog_ui_input_textarea:focus,
-body.adminimal-theme select.cke_dialog_ui_input_select:focus {
-  border-color: #0074BD;
-}
-
-body.adminimal-theme a.cke_dialog_ui_button:focus,
-body.adminimal-theme a.cke_dialog_ui_button:hover,
-body.adminimal-theme a.cke_dialog_ui_button:active {
-  border-color: #0074BD;
-  box-shadow: none;
-  text-decoration: none;
-  color: #fff;
-  background: #0074BD;
-}
-
-body.adminimal-theme a.cke_dialog_ui_button {
-  background: #eee;
-  padding: 4px 0;
-}
-
-body.adminimal-theme a.cke_dialog_ui_button:focus span,
-body.adminimal-theme a.cke_dialog_ui_button:hover span,
-body.adminimal-theme a.cke_dialog_ui_button:active span {
-  color: #fff;
-}
-
-body.adminimal-theme .cke_ltr .cke_dialog_close_button {
-  background: url("images/x-white.png") scroll no-repeat 50% 2px #B73939;
-  right: 10px;
-  top: 1px;
-  width: 45px;
-}
-
-body.adminimal-theme .cke_ltr .cke_dialog_close_button:hover {
-  background-color: #e55454;
-}
-
-body.adminimal-theme a.cke_dialog_ui_button_ok {
-  background: #4D8F46;
-  border-color: #4D8F46;
-  box-shadow: none;
-}
-
-body.adminimal-theme a.cke_dialog_ui_button_ok:hover {
-  background: #0A6700;
-  border-color: #0A6700;
-}
-
-body.adminimal-theme a.cke_path_item:hover, body.adminimal-theme a.cke_path_item:focus, body.adminimal-theme a.cke_path_item:active {
-  border-radius: 0;
-  -moz-border-radius: 0;
-  -webkit-border-radius: 0;
-  box-shadow: none;
-  text-decoration:none;
-  text-shadow: none;
 }
 
 .messages.theme-disabled {
@@ -2469,6 +2262,10 @@ body.adminimal-theme .views-displays .secondary .action-list li {
 
 body.adminimal-theme .views-displays .secondary .action-list li.last  {
   padding-bottom: 5px;
+}
+
+body.adminimal-theme .views-display-top ul#views-display-menu-tabs li a.error {
+  background: #f2dede;
 }
 
 body.adminimal-theme .views-display-top ul#views-display-menu-tabs li a.active {
@@ -3032,6 +2829,17 @@ body.sticky-actions .form-actions.form-wrapper {
   margin: 0;
   z-index: 999;
 }
+body.sticky-actions .ajax-new-content .form-actions.form-wrapper {
+  position: initial;
+  bottom: initial;
+  background: initial;
+  border-top: none;
+  width: initial;
+  left: initial;
+  padding: 0;
+  margin: 20px 0 0;
+  z-index: initial;
+}
 
 body.sticky-actions #page {
   margin-bottom: 60px;
@@ -3224,6 +3032,10 @@ body.sticky-actions #module-filter-submit.fixed.fixed-bottom .form-actions.form-
   right: 0;
 }
 
+[dir="rtl"] body.sticky-actions .ajax-new-content .form-actions.form-wrapper {
+  right: initial;
+}
+
 html[dir="rtl"].js input.form-autocomplete {
   text-indent: 1em;
 }
@@ -3263,6 +3075,77 @@ body.adminimal-skin-alternative.adminimal-theme.page-admin-structure-features #e
   padding-left: 0;
 }
 
+/* Fix Views Responsive Grid module see #2680767 */
+body.page-admin-structure-views-view #views-ui-edit-display-form #edit-options input.form-text {
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  -ms-box-sizing: border-box;
+  -o-box-sizing: border-box;
+  box-sizing: border-box;
+  max-width: 100%;
+  -webkit-padding-end: 8px;
+}
+
 .page-admin-structure-features-create form div.buttons {
   text-align: left;
+}
+
+/**
+ * Hide dummy checkbox in Fast Permissions Administration (FPA) see #2653436.
+ * by @rcodina.
+ */
+.adminimal-theme .fpa-container .dummy-checkbox {
+  display: none !important;
+}
+
+.adminimal-theme.page-admin-reports-dblog #block-system-help .content {
+  margin-bottom: 3em;
+}
+
+/* Fix Views main-content display issue see #1820494 */
+body.page-admin-structure-views-view #content-wrapper #main-content {
+  display: initial;
+}
+
+/* Diff revisions view */
+table.diff th a {
+  display: inline;
+}
+
+table.diff th,
+table.diff td,
+div.diff-section-title,
+.page-node-revisions-view .node {
+  padding: 0.5em;
+}
+
+table.diff .diff-prevlink,
+table.diff .diff-nextlink,
+table.diff .diff-links {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+table.diff .diff-prevlink a,
+table.diff .diff-nextlink a {
+  padding: 0.5em 0.75em;
+  background-color: #eee;
+}
+
+table.diff .diff-links a {
+  display: inline-block;
+  padding: 0.25em 0.75em;
+  background-color: #efefef;
+}
+
+table.diff .diff-links a.active {
+  background-color: #eee;
+  font-weight: bold;
+  display: inline-block;
+  padding: 0.25em 0.75em;
+}
+
+table.diff td.diff-section-title,
+div.diff-section-title {
+  font-size: 1em;
 }

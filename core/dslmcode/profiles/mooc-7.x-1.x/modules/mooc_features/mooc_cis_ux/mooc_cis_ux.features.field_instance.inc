@@ -10,7 +10,7 @@
 function mooc_cis_ux_field_default_field_instances() {
   $field_instances = array();
 
-  // Exported field_instance: 'node-section-field_instructional_outlines'
+  // Exported field_instance: 'node-section-field_instructional_outlines'.
   $field_instances['node-section-field_instructional_outlines'] = array(
     'bundle' => 'section',
     'default_value' => NULL,
@@ -22,6 +22,7 @@ function mooc_cis_ux_field_default_field_instances() {
         'label' => 'above',
         'module' => 'entityreference',
         'settings' => array(
+          'bypass_access' => FALSE,
           'link' => FALSE,
         ),
         'type' => 'entityreference_label',
@@ -60,9 +61,7 @@ function mooc_cis_ux_field_default_field_instances() {
     'widget' => array(
       'active' => 1,
       'module' => 'options',
-      'settings' => array(
-        'apply_chosen' => '',
-      ),
+      'settings' => array(),
       'type' => 'options_select',
       'weight' => 3,
     ),

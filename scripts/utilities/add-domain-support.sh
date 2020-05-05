@@ -14,6 +14,8 @@ cd $DIR
 
 # load config
 source ../../config/scripts/drush-create-site/config.cfg
+# load password config
+source ../../config/scripts/drush-create-site/configpwd.cfg
 
 #provide messaging colors for output to console
 txtbld=$(tput bold)             # Bold
@@ -38,25 +40,34 @@ if [ -z $elmsln ]; then
   elmslnwarn "You must have a functioning config directory."
   exit 1
 fi
-# if this is an authority of instance, can check but its annoying
-if [ -z $1 ]; then
-  elmslnwarn "You must supply the type of tool this is, authority or instance?"
-  exit 1
-fi
-# need to know what domain
-if [ -z $2 ]; then
-  elmslnwarn "You must supply the domain to produce"
-  exit 1
-fi
-# need to know what distro to build
-if [ -z $3 ]; then
-  elmslnwarn "What distribtuion should this build? (instances ignore this)"
-  exit 1
-fi
 tooltype=$1
 domain=$2
-tool=$2
 dist=$3
+# if this is an authority of instance, can check but its annoying
+if [ -z "$tooltype" ]; then
+  elmslnwarn "You must supply the type of tool this is, authority or instance?"
+  read tooltype
+  if [ -z "$tooltype" ]; then
+    exit 1
+  fi
+fi
+# need to know what domain
+if [ -z "$domain" ]; then
+  elmslnwarn "You must supply the domain to produce"
+  read domain
+  if [ -z "$domain" ]; then
+    exit 1
+  fi
+fi
+tool=$domain
+# need to know what distro to build
+if [ -z "$dist" ]; then
+  elmslnwarn "What distribtuion should this build? (instances ignore this)"
+  read dist
+  if [ -z "$dist" ]; then
+    exit 1
+  fi
+fi
 # check that this domain exists as a stack, otherwise error out
 if [ ! -d "$elmsln/core/dslmcode/stacks/$domain" ]; then
   elmslnwarn "This domain must already exist if we are to correctly discover it."
@@ -113,7 +124,7 @@ if [ $tooltype == 'authority' ];
   cd "$elmsln/domains/$domain"
 
   sitedir=${webdir}/${tool}/sites
-  drush site-install ${dist} -y --db-url=mysql://${tool}_${host}:$dbpw@127.0.0.1/${tool}_${host} --db-su=$dbsu --db-su-pw=$dbsupw  --account-mail="$admin" --site-mail="$site_email" --site-name="$tool"
+  drush site-install ${dist} -y --db-url=mysql://${tool}_${host}:$dbpw@localhost/${tool}_${host} --db-su=$dbsu --db-su-pw=$dbsupw  --account-mail="$admin" --site-mail="$site_email" --site-name="$tool"
   #move out of $tool site directory to host
   sudo mkdir -p $sitedir/$tool/$host
   sudo mkdir -p $sitedir/$tool/$host/files
@@ -155,7 +166,7 @@ if [ $tooltype == 'authority' ];
   # add in our cache bins now that we know it built successfully
   echo "" >> $sitedir/$tool/$host/settings.php
   echo "" >> $sitedir/$tool/$host/settings.php
-  echo "\$conf['cache_prefix'] = '$tool_$host';" >> $sitedir/$tool/$host/settings.php
+  echo "\$conf['cache_prefix'] = '${tool}_${host}';" >> $sitedir/$tool/$host/settings.php
   echo "" >> $sitedir/$tool/$host/settings.php
   echo "require_once DRUPAL_ROOT . '/../../shared/drupal-7.x/settings/shared_settings.php';" >> $sitedir/$tool/$host/settings.php
 
@@ -189,7 +200,7 @@ fi
 if [ $tooltype == 'instance' ];
   then
   cd "$elmsln/core/dslmcode/stacks/$domain"
-  drush site-install -y --db-url=mysql://${domain}_${host}_dbo:$dbpw@127.0.0.1/default_${domain} --db-su=$dbsu --db-su-pw=$dbsupw --account-mail="$admin" --site-mail="$site_email"
+  drush site-install -y --db-url=mysql://${domain}_${host}_dbo:$dbpw@localhost/default_${domain} --db-su=$dbsu --db-su-pw=$dbsupw --account-mail="$admin" --site-mail="$site_email"
 fi
 
 # todo, still need to re-up the _elmsln_scripted key that's been generated
@@ -208,7 +219,6 @@ elmslnecho "<Directory $elmsln/domains/$domain>"
 elmslnecho "    AllowOverride All"
 elmslnecho "    Order allow,deny"
 elmslnecho "    allow from all"
-elmslnecho "    Include $elmsln/domains/$domain/.htaccess"
 elmslnecho "</Directory>"
 elmslnecho ""
 elmslnecho "After that is in place, restart apache and then you should be able to access ${protocol}://${domain}.${address}/README.txt"

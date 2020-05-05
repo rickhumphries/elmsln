@@ -130,6 +130,8 @@ function _elmsln_installer_post_install_cleanup() {
   if (function_exists('strongarm_init')) {
     strongarm_init();
   }
+  // ensure we don't send update notify emails by default at least
+  variable_del('update_notify_emails');
   // revert all features
   features_revert();
   // rebuild the menu
@@ -155,7 +157,7 @@ function _elmsln_installer_make_default_section() {
     $node->revision = 1;
     $node->title = t('Master Section');
     // make up a random section id to make things happy but fake
-    $node->field_section_id[LANGUAGE_NONE][0]['value'] = 'master_' . rand(1000, 5000);
+    $node->field_section_id[LANGUAGE_NONE][0]['value'] = 'master';
     // mark this as inactive so it can sync with systems
     $node->field_cis_active[LANGUAGE_NONE][0]['value'] = 0;
     // build out via submit then save

@@ -227,6 +227,10 @@ function system_list_reset() {
   drupal_static_reset('list_themes');
   cache_clear_all('bootstrap_modules', 'cache_bootstrap');
   cache_clear_all('system_list', 'cache_bootstrap');
+
+  // Clean up the bootstrap file scan cache.
+  drupal_static_reset('_drupal_file_scan_cache');
+  cache_clear_all('_drupal_file_scan_cache', 'cache_bootstrap');
 }
 
 /**
@@ -320,24 +324,28 @@ function module_load_install($module) {
  *   The name of the included file, if successful; FALSE otherwise.
  */
 function module_load_include($type, $module, $name = NULL) {
-  static $file_name = array();
+  static $files = array();
+
   if (!isset($name)) {
     $name = $module;
   }
+
   $key = $type . ':' . $module . ':' . $name;
-  if (!empty($file_name[$key])) {
-    return $file_name[$key];
+  if (isset($files[$key])) {
+    return $files[$key];
   }
 
   if (function_exists('drupal_get_path')) {
     $file = DRUPAL_ROOT . '/' . drupal_get_path('module', $module) . "/$name.$type";
     if (is_file($file)) {
       require_once $file;
-      $file_name[$key] = $file;
+      $files[$key] = $file;
       return $file;
     }
+    else {
+      $files[$key] = FALSE;
+    }
   }
-  $file_name[$key] = FALSE;
   return FALSE;
 }
 
@@ -372,20 +380,22 @@ function module_load_all_includes($type, $name = NULL) {
  * - Invoke hook_modules_installed().
  * - Invoke hook_modules_enabled().
  *
- * @param $module_list
+ * @param string[] $module_list
  *   An array of module names.
- * @param $enable_dependencies
+ * @param bool $enable_dependencies
  *   If TRUE, dependencies will automatically be added and enabled in the
  *   correct order. This incurs a significant performance cost, so use FALSE
  *   if you know $module_list is already complete and in the correct order.
  *
- * @return
+ * @return bool
  *   FALSE if one or more dependencies are missing, TRUE otherwise.
  *
  * @see hook_install()
  * @see hook_enable()
  * @see hook_modules_installed()
  * @see hook_modules_enabled()
+ * @see module_disable()
+ * @see drupal_uninstall_modules()
  */
 function module_enable($module_list, $enable_dependencies = TRUE) {
   if ($enable_dependencies) {
@@ -394,7 +404,11 @@ function module_enable($module_list, $enable_dependencies = TRUE) {
     // Create an associative array with weights as values.
     $module_list = array_flip(array_values($module_list));
 
-    while (list($module) = each($module_list)) {
+    // The array is iterated over manually (instead of using a foreach) because
+    // modules may be added to the list within the loop and we need to process
+    // them.
+    while ($module = key($module_list)) {
+      next($module_list);
       if (!isset($module_data[$module])) {
         // This module is not found in the filesystem, abort.
         return FALSE;
@@ -512,12 +526,15 @@ function module_enable($module_list, $enable_dependencies = TRUE) {
 /**
  * Disables a given set of modules.
  *
- * @param $module_list
+ * @param string[] $module_list
  *   An array of module names.
- * @param $disable_dependents
+ * @param bool $disable_dependents
  *   If TRUE, dependent modules will automatically be added and disabled in the
  *   correct order. This incurs a significant performance cost, so use FALSE
  *   if you know $module_list is already complete and in the correct order.
+ *
+ * @see drupal_uninstall_modules()
+ * @see module_enable()
  */
 function module_disable($module_list, $disable_dependents = TRUE) {
   if ($disable_dependents) {
@@ -527,7 +544,11 @@ function module_disable($module_list, $disable_dependents = TRUE) {
     $module_list = array_flip(array_values($module_list));
 
     $profile = drupal_get_profile();
-    while (list($module) = each($module_list)) {
+    // The array is iterated over manually (instead of using a foreach) because
+    // modules may be added to the list within the loop and we need to process
+    // them.
+    while ($module = key($module_list)) {
+      next($module_list);
       if (!isset($module_data[$module]) || !$module_data[$module]->status) {
         // This module doesn't exist or is already disabled, skip it.
         unset($module_list[$module]);
@@ -684,8 +705,8 @@ function module_hook($module, $hook) {
  * Determines which modules are implementing a hook.
  *
  * Lazy-loaded include files specified with "group" via hook_hook_info() or
- * hook_module_implements_alter() will be automatically included as part of
- * module_implements(*, *, FALSE).
+ * hook_module_implements_alter() will be automatically included by this
+ * function when necessary.
  *
  * @param string $hook
  *   The name of the hook (e.g. "help" or "menu").
@@ -697,7 +718,7 @@ function module_hook($module, $hook) {
  *   implementations to be regenerated (such as after enabling a new module,
  *   before processing hook_enable).
  *
- * @return string[]|null
+ * @return
  *   An array with the names of the modules which are implementing this hook.
  *
  * @see module_implements_write_cache()
@@ -729,7 +750,8 @@ function module_implements($hook, $sort = FALSE, $reset = FALSE) {
     drupal_static_reset('module_hook_info');
     drupal_static_reset('drupal_alter');
     cache_clear_all('hook_info', 'cache_bootstrap');
-    return NULL;
+    cache_clear_all('system_cache_tables', 'cache');
+    return;
   }
 
   // Fetch implementations from cache.
@@ -785,7 +807,7 @@ function module_implements($hook, $sort = FALSE, $reset = FALSE) {
         }
       }
     }
-    // Implementations for this hook are now "verified"
+    // Implementations for this hook are now "verified".
     $verified[$hook] = TRUE;
   }
   elseif (!isset($verified[$hook])) {
@@ -874,6 +896,11 @@ function module_hook_info() {
  * @see module_implements()
  */
 function module_implements_write_cache() {
+  // The list of implementations includes vital modules only before full
+  // bootstrap, so do not write cache if we are not fully bootstrapped yet.
+  if (drupal_get_bootstrap_phase() != DRUPAL_BOOTSTRAP_FULL) {
+    return;
+  }
   $implementations = &drupal_static('module_implements');
   if (isset($implementations['#write_cache'])) {
     unset($implementations['#write_cache']);
@@ -921,7 +948,9 @@ function module_invoke($module, $hook) {
  *
  * @return
  *   An array of return values of the hook implementations. If modules return
- *   arrays from their implementations, those are merged into one array.
+ *   arrays from their implementations, those are merged into one array
+ *   recursively. Note: integer keys in arrays will be lost, as the merge is
+ *   done using array_merge_recursive().
  *
  * @see drupal_alter()
  */

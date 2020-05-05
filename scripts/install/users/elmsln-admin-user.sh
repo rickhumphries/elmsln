@@ -30,6 +30,11 @@ homedir=$1
 if [ -z "$homedir" ]; then
   homedir=$HOME
 fi
+# establish as webadmin group otherwise they can't modify the stack at all
+# only do this when running in interactive mode
+if [[ $webgroup != 'root' ]]; then
+  sudo usermod -a -G $webgroup $USER
+fi
 
 # modify the user's home directory to run drush and make life lazy
 if [[ ! -d "${homedir}/elmsln" ]] ; then
@@ -43,8 +48,12 @@ echo "alias leafy='bash /var/www/elmsln/scripts/elmsln.sh'" >> $homedir/.bashrc
 
 # setup drush
 sed -i '1i export PATH="$HOME/.composer/vendor/bin:$PATH"' $homedir/.bashrc
+sed -i '1i export PATH="$HOME/.config/composer/vendor/bin:$PATH"' $homedir/.bashrc
+
 source $homedir/.bashrc
-php /usr/local/bin/composer global require drush/drush:6.*
+php /usr/local/bin/composer self-update
+php /usr/local/bin/composer global require consolidation/cgr
+cgr drush/drush:8.x-dev --prefer-source
 
 # copy in the elmsln server stuff as the baseline for .drush
 if [ ! -d $homedir/.drush ]; then

@@ -10,17 +10,6 @@
 define('H5P_VIEWS_DIR', drupal_get_path('module', 'h5p') . '/views');
 
 /**
- * Implements hook_init()
- */
-function h5p_init() {
-  if (path_is_admin(current_path()) && empty($_POST) && user_access('access administration pages')) {
-    $core = _h5p_get_instance('core');
-    $core->validateLibrarySupport();
-    _h5p_display_unsupported_libraries(arg(2) === 'h5p');
-  }
-}
-
-/**
  * Implements hook_menu().
  */
 function h5p_menu() {
@@ -47,7 +36,7 @@ function h5p_menu() {
     'title' => 'H5P Library Details',
     'title callback' => '_h5p_library_details_title',
     'title arguments' => array(4),
-    'description' => 'Get detailed info on a library',
+    'description' => 'Get detailed info on a library',
     'page callback' => 'h5p_library_details',
     'page arguments' => array(4),
     'access arguments' => array('administer site configuration'),
@@ -102,9 +91,16 @@ function h5p_menu() {
     'type' => MENU_CALLBACK,
   );
 
-  // TODO: Should we stick to url conventions? http://moz.com/blog/11-best-practices-for-urls
-  // If we want to hint on return type we should call this //h5p/set-finished.json
+  /**
+   * @deprecated since 02/16. Use set-finished.json instead
+   */
   $items['h5p-ajax/setFinished'] = array(
+    'page callback' => 'h5p_set_finished',
+    'access callback' => 'h5p_access_set_finished',
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['h5p-ajax/set-finished.json'] = array(
     'page callback' => 'h5p_set_finished',
     'access callback' => 'h5p_access_set_finished',
     'type' => MENU_LOCAL_TASK,
@@ -127,18 +123,29 @@ function h5p_menu() {
  */
 function h5p_cron() {
   h5p_fetch_libraries_metadata();
+  remove_old_log_events();
+}
+
+/**
+ * Remove any log messages older than the set limit.
+ */
+function remove_old_log_events() {
+  $older_than = (time() - H5PEventBase::$log_time);
+
+  db_delete('h5p_events')
+    ->condition('created_at', $older_than, '<')
+    ->execute();
 }
 
 function h5p_fetch_libraries_metadata($fetchingDisabled = FALSE) {
   // If fetching of libraries from h5p.org is enabled and
   // It has not been run the last 24 hours, let's do it
-  // Intentionally not doing === TRUE on h5p_allow_communication_with_h5p_org test
-  if ($fetchingDisabled || (variable_get('h5p_allow_communication_with_h5p_org', TRUE) &&
+  if ($fetchingDisabled || ((variable_get('h5p_hub_is_enabled', TRUE) || variable_get('h5p_send_usage_statistics', TRUE)) &&
      (intval(variable_get('h5p_fetched_library_metadata_on', 0)) < (time() - 86400)))) {
     // Fetch the library-metadata:
     $core = _h5p_get_instance('core');
     $core->fetchLibrariesMetadata($fetchingDisabled);
-    variable_set('h5p_fetched_library_metadata_on', time());
+    h5p_variable_set('h5p_fetched_library_metadata_on', time());
   }
 }
 
@@ -174,8 +181,8 @@ function _h5p_make_urls_absolute($urls, $remove = NULL) {
  * @param int $content_id
  * @return string
  */
-function h5p_get_export_path($content_id) {
-  return variable_get('h5p_export', 1) ? file_create_url(_h5p_get_h5p_path() . '/exports/' . $content_id . '.h5p') : '';
+function h5p_get_export_path($content) {
+  return variable_get('h5p_export', 1) ? file_create_url(_h5p_get_h5p_path() . '/exports/' . ($content['slug'] ? $content['slug'] . '-' : '') . $content['id'] . '.h5p') : '';
 }
 
 /**
@@ -195,7 +202,7 @@ function h5p_node_info() {
     'h5p_content' => array(
       'name' => t('Interactive content'),
       'base' => 'h5p',
-      'description' => 'Upload HTML5 packages(.h5p) to create interactive content.',
+      'description' => t('Create interactive H5P content'),
     ),
   );
 }
@@ -225,6 +232,22 @@ function h5p_permission() {
       'title' => t('Create restricted H5P content types'),
       'description' => t('The user is allowed to create H5P content types that has been restricted in the library administration interface.'),
     ),
+    'download all h5ps' => array(
+      'title' => t('Download enabled for all H5Ps'),
+      'description' => t("The download button will be available for all H5Ps even if download button is hidden by configuration settings. This won't have any effect if download button is globally disabled"),
+    ),
+    'download own h5ps' => array(
+      'title' => t('Download enabled for own H5Ps'),
+      'description' => t("The download button will be available for H5Ps the user has access to edit even if download button is hidden by configuration settings. This won't have any effect if download button is globally disabled"),
+    ),
+    'embed all h5ps' => array(
+      'title' => t('Embed enabled for all H5Ps'),
+      'description' => t("The embed button will be available for all H5Ps even if embed button is hidden by configuration settings. This won't have any effect if embed button is globally disabled"),
+    ),
+    'embed own h5ps' => array(
+      'title' => t('Embed enabled for own H5Ps'),
+      'description' => t("The embed button will be available for H5Ps the user has access to edit even even if embed button is hidden by configuration settings. This won't have any effect if embed button is globally disabled"),
+    ),
   );
 }
 
@@ -236,15 +259,21 @@ function h5p_form(&$node, $form_state) {
 
   _h5p_maintain_session_variables();
 
+  $core = _h5p_get_instance('core');
+
+  // When a node is being translated, the original node is found in $node->translation_source
+  // We need to use that to get metadata and other H5P-specific data
+  $source_node = isset($node->translation_source) ? $node->translation_source : $node;
+
   $type = node_type_get_type($node);
 
   $form['#validate'][] = 'h5p_form_validate';
 
   $form['title'] = array(
-    '#type' => 'textfield',
-    '#title' => check_plain($type->title_label),
-    '#required' => TRUE,
-    '#default_value' => $node->title,
+    '#type' => 'hidden',
+    '#required' => FALSE, // Does not get set when using Legacy upload
+    '#default_value' => $source_node->title,
+    '#attributes' => array('id' => 'h5p-plugin-form-title', 'style' => 'display: none;')
   );
 
   $form['#attributes'] = array('enctype' => "multipart/form-data");
@@ -256,46 +285,44 @@ function h5p_form(&$node, $form_state) {
     '#weight' => 2,
   );
 
-  if (isset($node->json_content) || isset($node->translation_source) && isset($node->translation_source->json_content)) {
-    $source = isset($node->translation_source) ? $node->translation_source : $node;
-    $content = array(
-      'id' => h5p_get_content_id($node),
-      'title' => $source->title,
-      'params' => $source->json_content,
-      'language' => $source->language,
-      'library' => $source->main_library,
-      'embedType' => 'div',
-    );
-    $core = _h5p_get_instance('core');
+  if (isset($source_node->json_content)) {
+    $content = h5p_get_content($source_node);
     $filtered_params = $core->filterParameters($content);
   }
   else {
     $filtered_params = '{}';
   }
 
+  // Combine params and metadata in one JSON object
+  $main_content_data = array('params' => json_decode($filtered_params));
+  if (isset($source_node->metadata)) {
+    $main_content_data['metadata'] = $source_node->metadata;
+  }
+  $main_content_data = json_encode($main_content_data, TRUE);
+
   $form['json_content'] = array(
     '#type' => 'hidden',
-    '#default_value' => $filtered_params,
+    '#default_value' => $main_content_data,
   );
 
   $form['main_library_id'] = array(
     '#type' => 'value',
-    '#default_value' => isset($node->main_library_id) ? $node->main_library_id : '',
+    '#default_value' => isset($source_node->main_library_id) ? $source_node->main_library_id : '',
   );
 
   $form['embed_type'] = array(
     '#type' => 'value',
-    '#default_value' => isset($node->embed_type) ? $node->embed_type : 'div',
+    '#default_value' => isset($source_node->embed_type) ? $source_node->embed_type : 'div',
   );
 
-  if (!isset($node->disable)) {
+  if (!isset($source_node->disable)) {
     $node->disable = H5PCore::DISABLE_NONE;
   }
 
   // Keep track of the old disable value
   $form['disable'] = array(
     '#type' => 'value',
-    '#value' => $node->disable
+    '#value' => $source_node->disable
   );
 
   // Display options
@@ -310,33 +337,78 @@ function h5p_form(&$node, $form_state) {
         'class' => array('h5p-action-bar-settings')
       ),
       '#attached' => array(
-        'js' => array(drupal_get_path('module', 'h5p') . '/library/js/disable.js')
+        'js' => array(drupal_get_path('module', 'h5p') . '/library/js/h5p-display-options.js')
       )
     );
 
+    // Add display options
+    $display_options = $core->getDisplayOptionsForEdit($source_node->disable !== H5PCore::DISABLE_NONE ? $source_node->disable : NULL);
     $labels = _h5p_get_disable_labels();
-    foreach (H5PCore::$disable as $bit => $name) {
-      if (variable_get('h5p_' . ($bit & H5PCore::DISABLE_DOWNLOAD ? 'export' : $name), TRUE)) {
-        $form['h5p_options'][$name] = array(
-          '#type' => 'checkbox',
-          '#title' => $labels[$bit],
-          '#default_value' => !($node->disable & $bit)
-        );
-      }
+    foreach ($display_options as $name => $value) {
+      _h5p_add_display_option($form['h5p_options'], $name, $labels[$name], $value, ($name === H5PCore::DISPLAY_OPTION_FRAME ? '.h5p-action-bar-settings .form-item:not(.form-item-frame)' : NULL));
     }
-
-    $form['#submit'][] = '_h5p_form_submit';
   }
+
+  $form['#submit'][] = '_h5p_form_submit';
 
   return $form;
 }
+
+/**
+ * Helper function for adding display options to form
+ *
+ * @method _h5p_add_display_option
+ * @param  Array      $element               Reference to form element
+ * @param  String     $name                  Name of form element
+ * @param  String     $title
+ * @param  String     $value
+ * @param  [type]     $visibility_subject_id A jquery selector. If this is set,
+ *                    these DOM elements will be hidden when this this checkbox
+ *                    is unchecked
+ */
+function _h5p_add_display_option (&$element, $name, $title, $value, $visibility_subject_id = null) {
+  $element[$name] = array(
+    '#type' => 'checkbox',
+    '#title' => $title,
+    '#default_value' => $value,
+  );
+
+  if ($visibility_subject_id !== null) {
+    $classes = array('h5p-visibility-toggler');
+    $element[$name]['#attributes'] = array(
+      'class' => $classes,
+      'data-h5p-visibility-subject-selector' => $visibility_subject_id,
+    );
+  }
+}
+
 
 /**
  * Handle h5p node form submission
  */
 function _h5p_form_submit($form, &$form_state) {
   $core = _h5p_get_instance('core');
-  $form_state['values']['disable'] = $core->getDisable($form_state['values'], $form_state['values']['disable']);
+  $form_state['values']['disable'] = $core->getStorableDisplayOptions($form_state['values'], $form_state['values']['disable']);
+
+  $json_content = json_decode($form_state['values']['json_content']);
+  if ($json_content === NULL) {
+    // Error in JSON, prevent saving it and use the old one
+    unset($form_state['values']['json_content']);
+  }
+  else {
+    $form_state['values']['json_content'] = json_encode($json_content->params);
+    $form_state['values']['metadata'] = $json_content->metadata;
+  }
+
+  if (!empty($_SESSION['h5p_upload'])) { // Legacy upload active
+    if (empty($form_state['values']['metadata']) || empty($form_state['values']['metadata']['title'])) {
+      // Fix for legacy content upload to work.
+      // Fetch title from h5p.json or use a default string if not available
+      $h5p_validator = _h5p_get_instance('validator');
+      $form_state['values']['metadata']['title'] = empty($h5p_validator->h5pC->mainJsonData['title']) ? 'Uploaded Content' : $h5p_validator->h5pC->mainJsonData['title'];
+    }
+    $form_state['values']['title'] = $form_state['values']['metadata']['title']; // Sort of a hack, but there is no JavaScript that sets the value when there is no editor...
+  }
 }
 
 /**
@@ -344,11 +416,11 @@ function _h5p_form_submit($form, &$form_state) {
  */
 function _h5p_get_disable_labels() {
   return array(
-    H5PCore::DISABLE_FRAME => t('Display action bar and frame'),
-    H5PCore::DISABLE_DOWNLOAD => t('Download button'),
-    H5PCore::DISABLE_EMBED => t('Embed button'),
-    H5PCore::DISABLE_COPYRIGHT => t('Copyright button'),
-    H5PCore::DISABLE_ABOUT => t('About H5P button')
+    H5PCore::DISPLAY_OPTION_FRAME => t('Display buttons (download, embed and copyright)'),
+    H5PCore::DISPLAY_OPTION_DOWNLOAD => t('Allow download'),
+    H5PCore::DISPLAY_OPTION_EMBED => t('Embed button'),
+    H5PCore::DISPLAY_OPTION_COPYRIGHT => t('Copyright button'),
+    H5PCore::DISPLAY_OPTION_ABOUT => t('About H5P button')
   );
 }
 
@@ -375,7 +447,7 @@ function h5p_form_validate($form, &$form_state) {
     $_SESSION['h5p_upload'] = $form_state['values']['h5p'] = drupal_realpath($file->uri);
     $_SESSION['h5p_upload_folder'] = drupal_realpath($temporary_file_path);
   }
-  elseif (!isset($form['#node']->nid) && empty($form_state['values']['h5p']) && empty($_SESSION['h5p_upload'])) {
+  elseif (empty($form['#node']->main_library_id) && empty($form_state['values']['h5p']) && empty($_SESSION['h5p_upload'])) {
     form_set_error('h5p', t('You must upload a h5p file.'));
   }
 }
@@ -387,6 +459,17 @@ function h5p_validate($node, &$form) {
   if (isset($_SESSION['h5p_upload'])) {
     $h5p_validator = _h5p_get_instance('validator');
     $valid = $h5p_validator->isValidPackage();
+
+    foreach ($h5p_validator->h5pC->mainJsonData['preloadedDependencies'] as $dep) {
+      if ($dep['machineName'] === $h5p_validator->h5pC->mainJsonData['mainLibrary']) {
+        if ($h5p_validator->h5pF->libraryHasUpgrade($dep)) {
+          // We do not allow storing old content due to security concerns
+          form_set_error('h5p', t("You're trying to upload content of an older version of H5P. Please upgrade the content on the server it originated from and try to upload again or turn on the H5P Hub to have this server upgrade it for your automaticall."));
+          break;
+        }
+      }
+    }
+
     if (!$valid) {
       form_set_error('h5p', t('The uploaded file was not a valid H5P package'));
       // Nothing is valid, nothing is kept.
@@ -401,18 +484,47 @@ function h5p_validate($node, &$form) {
 function h5p_insert($node) {
   if (isset($_SESSION['h5p_upload'])) {
     $h5p_core = _h5p_get_instance('storage');
-    $h5p_core->savePackage(h5p_get_content_id($node), $node->nid , FALSE, array('disable' => $node->disable));
+    $h5p_core->savePackage(h5p_get_content_id($node), $node->nid , FALSE, array(
+      'disable' => $node->disable,
+      'title' => $node->title
+    ));
   }
   else {
+    if (!isset($node->main_library['name'])) {
+      $lib = db_query(
+          "SELECT machine_name,
+                  major_version,
+                  minor_version
+             FROM {h5p_libraries}
+            WHERE library_id = :id",
+          array(
+            ':id' => $node->main_library_id
+          ))->fetchObject();
+      $lib = array(
+        'libraryId' => $node->main_library_id,
+        'machineName' => $lib->machine_name,
+        'majorVersion' => $lib->major_version,
+        'minorVersion' => $lib->minor_version
+      );
+    }
+    else {
+      $lib = array(
+        'libraryId' => $node->main_library_id,
+        'machineName' => (isset($node->main_library['name']) ? $node->main_library['name'] : ''),
+        'majorVersion' => (isset($node->main_library['majorVersion']) ? $node->main_library['majorVersion'] : ''),
+        'minorVersion' => (isset($node->main_library['minorVersion']) ? $node->main_library['minorVersion'] : '')
+      );
+    }
     $core = _h5p_get_instance('core');
     $core->saveContent(array(
       'id' => h5p_get_content_id($node),
+      'title' => $node->title,
       'params' => $node->json_content,
+      'metadata' => $node->metadata,
       'embed_type' => $node->embed_type,
       'disable' => $node->disable,
-      'library' => array(
-        'libraryId' => $node->main_library_id
-      )
+      'library' => $lib,
+      'h5p_library' => isset($node->h5p_library) ? $node->h5p_library : NULL
     ), $node->nid);
   }
 }
@@ -439,7 +551,11 @@ function h5p_update($node) {
     if (isset($_SESSION['h5p_upload'])) {
       // Replace old package
       $h5p_storage = _h5p_get_instance('storage');
-      $h5p_storage->updatePackage(h5p_get_content_id($node), $node->nid, array('disable' => $node->disable));
+      $h5p_storage->savePackage(array(
+          'id' => h5p_get_content_id($node),
+          'title' => $node->title,
+          'disable' => $node->disable
+      ), $node->nid, FALSE);
     }
     else {
       h5p_insert($node);
@@ -451,21 +567,50 @@ function h5p_update($node) {
  * Implements hook_delete().
  */
 function h5p_delete($node) {
-  $h5p_core = _h5p_get_instance('storage');
-  $h5p_export = _h5p_get_instance('export');
-
-  $res = db_query("SELECT content_id FROM {h5p_nodes} WHERE nid = :nid", array(':nid' => $node->nid));
-  while ($content_id = $res->fetchField()) {
-    $h5p_core->deletePackage($content_id);
-    $h5p_export->deleteExport($content_id);
+  $res = db_query("SELECT content_id AS id, slug FROM {h5p_nodes} WHERE nid = :nid", array(':nid' => $node->nid));
+  while ($content = $res->fetchAssoc()) {
+    h5p_delete_h5p_content($content);
   }
+
+  if (isset($node->main_library)) {
+    // Log content delete
+    new H5PEvent('content', 'delete',
+      $node->nid,
+      $node->title,
+      $node->main_library['name'],
+      $node->main_library['majorVersion'] . '.' . $node->main_library['minorVersion']
+    );
+  }
+}
+
+/**
+ * Implements hook_node_revision_delete().
+ */
+function h5p_node_revision_delete($node) {
+  if (variable_get('h5p_revisioning', 1)) {
+    h5p_delete_h5p_content(array(
+      'id' => $node->vid,
+      'slug' => $node->h5p_slug
+    ));
+  }
+}
+
+/**
+ * Delete all data related to H5P content.
+ * @param array $content
+ */
+function h5p_delete_h5p_content($content) {
+  $h5p_core = _h5p_get_instance('storage');
+  $h5p_core->deletePackage($content);
+
+  // Remove content points
   db_delete('h5p_points')
-    ->condition('content_id', h5p_get_content_id($node))
+    ->condition('content_id', $content['id'])
     ->execute();
 
   // Remove content user data
   db_delete('h5p_content_user_data')
-    ->condition('content_main_id', $node->nid)
+    ->condition('content_main_id', $content['id'])
     ->execute();
 }
 
@@ -484,6 +629,8 @@ function h5p_load($nodes) {
       $node->main_library = $content['library'];
       $node->filtered = $content['filtered'];
       $node->disable = $content['disable'];
+      $node->h5p_slug = $content['slug'];
+      $node->metadata = $content['metadata'];
     }
   }
 }
@@ -495,17 +642,7 @@ function h5p_view($node, $view_mode = 'full') {
   node_object_prepare($node);
 
   if (!isset($node->in_preview) && isset($node->main_library_id)) {
-    $content_id = h5p_get_content_id($node);
-    $embed = H5PCore::determineEmbedType($node->embed_type, $node->main_library['embedTypes']);
-
-    h5p_add_files_and_settings($node, $embed);
-    // TODO: Should we use Drupal's theme system?
-    if ($embed === 'div') {
-      $html = '<div class="h5p-content" data-content-id="' .  $content_id . '"></div>';
-    }
-    else {
-      $html = '<div class="h5p-iframe-wrapper"><iframe id="h5p-iframe-' . $content_id . '" class="h5p-iframe" data-content-id="' . $content_id . '" style="height:1px" src="about:blank" frameBorder="0" scrolling="no"></iframe></div>';
-    }
+    $html = _include_h5p($node);
   }
 
   if (!isset($html)) {
@@ -514,39 +651,15 @@ function h5p_view($node, $view_mode = 'full') {
   else {
     h5p_set_started(h5p_get_content_id($node));
   }
-
-  // Check if any unsupported libraries. Only users which may update this node will get the warning message
-  if (node_access('update', $node)) {
-    _h5p_display_unsupported_libraries();
-  }
+  $output = '<div class="h5p-iframe-wrapper"><iframe style="height:1px" src="' . url('h5p/embed/' . $node->nid, array('absolute' => TRUE)) . '" width=":w" height=":h" frameborder="0" scrolling="no" allowfullscreen="allowfullscreen"></iframe></div>';
+  $output .= '<script src="' . h5p_get_resize_url() . '" charset="UTF-8"></script>';
 
   $node->content['h5p'] = array(
-    '#markup' => $html,
+    '#markup' => $output,
     '#weight' => 1,
   );
 
   return $node;
-}
-
-/**
- * If unsupported libraries, display a message
- */
-function _h5p_display_unsupported_libraries($display_details = FALSE) {
-  // Check if any unsupported libraries. Only users which may update this node will get the warning message
-  $unsupported_libraries = variable_get('h5p_unsupported_libraries');
-  if ($unsupported_libraries !== NULL) {
-    if ($display_details) {
-      $core = _h5p_get_instance('core');
-      $message = $core->createMarkupForUnsupportedLibraryList($unsupported_libraries);
-    }
-    else {
-      $message = t('You have %num_libs H5P libraries with versions not supported anymore. ', array('%num_libs' => sizeof($unsupported_libraries)));
-    }
-
-    $message .= t('Please upgrade all H5P libraries <a href="@url">here</a>', array('@url' => url('admin/content/h5p/libraries/upgrade-all')));
-
-    drupal_set_message($message, 'warning', FALSE);
-  }
 }
 
 /**
@@ -561,6 +674,64 @@ function h5p_user_delete($account) {
   db_delete('h5p_content_user_data')
     ->condition('user_id', $account->uid)
     ->execute();
+}
+
+/**
+ * Implements hook_filter_info().
+ */
+function h5p_filter_info() {
+  $filters['h5p_content'] = array(
+    'title' => t('H5P Content'),
+    'description' => t("Provides shortcodes for adding H5P content to this text format. Should be applied last so that other filters doesn't strip away tags added by this filter."),
+    'process callback' => '_h5p_process_shortcodes',
+    'tips callback' => '_h5p_filter_tips',
+    'cache' => FALSE, // Needs to add its scripts every time. Will make the entire text format not cacheable
+  );
+
+  return $filters;
+}
+
+/**
+ * Provides filter tips callback.
+ */
+function _h5p_filter_tips($filter, $format, $long = FALSE) {
+  return t('Add a [h5p=&lt;h5p id&gt;] tag to include h5p content, for instance [h5p=12] to include the H5P with node id 12.');
+}
+
+/**
+ * Replace H5P tags with h5p embed codes and add H5P files
+ */
+function _h5p_process_shortcodes($text, $filter) {
+  return preg_replace_callback('%\[h5p=([0-9]*)]%', function($matches) {
+    $node = node_load($matches[1]);
+    if (!$node || $node->type !== 'h5p_content') {
+      return '';
+    }
+    $html = _include_h5p($node);
+    h5p_set_started(h5p_get_content_id($node));
+    return $html;
+  }, $text);
+}
+
+/**
+ * Adds H5P embed code and necessary files
+ *
+ * @param object $node - H5P node
+ * @return string - HTML code for embedding the H5P
+ */
+
+function _include_h5p($node) {
+  $content_id = h5p_get_content_id($node);
+  $embed = H5PCore::determineEmbedType($node->embed_type, $node->main_library['embedTypes']);
+
+  h5p_add_files_and_settings($node, $embed);
+  if ($embed === 'div') {
+    $html = '<div class="h5p-content" data-content-id="' .  $content_id . '"></div>';
+  }
+  else {
+    $html = '<div class="h5p-iframe-wrapper"><iframe id="h5p-iframe-' . $content_id . '" class="h5p-iframe" data-content-id="' . $content_id . '" style="height:1px" src="about:blank" frameBorder="0" scrolling="no"></iframe></div>';
+  }
+  return $html;
 }
 
 /**
@@ -579,6 +750,10 @@ function h5p_access_set_finished() {
  * @return {boolean}
  */
 function h5p_content_access($id, $op = 'view') {
+  if ($id === '0') {
+    // No content. Check if access to H5P content type.
+    return node_access('create', 'h5p_content');
+  }
   if (variable_get('h5p_revisioning', 1)) {
     // We got vid, but we need nid. Let's ask DB
     $id = (int) db_query('SELECT nid FROM {node_revision} WHERE vid = :vid', array(':vid' => $id))->fetchField();
@@ -628,9 +803,12 @@ function h5p_set_started($content_id) {
  */
 function h5p_set_finished() {
   global $user;
-  $result = array('success' => FALSE);
 
-  if ($user->uid && $_POST['contentId'] !== NULL && $_POST['score'] !== NULL && $_POST['maxScore'] !== NULL) {
+  if (!H5PCore::validToken('result', filter_input(INPUT_GET, 'token'))) {
+    return H5PCore::ajaxError(t('Invalid security token.'));
+  }
+
+  if ($user->uid && is_numeric($_POST['contentId']) && is_numeric($_POST['score']) && is_numeric($_POST['maxScore'])) {
     db_update('h5p_points')
       ->fields(array(
         'finished' => time(),
@@ -640,10 +818,10 @@ function h5p_set_finished() {
       ->condition('content_id', $_POST['contentId'])
       ->condition('uid', $user->uid)
       ->execute();
-    $result['success'] = TRUE;
+    return H5PCore::ajaxSuccess();
   }
 
-  echo json_encode($result);
+  H5PCore::ajaxError();
 }
 
 /**
@@ -682,43 +860,28 @@ function h5p_add_core_assets() {
 function h5p_get_core_settings() {
   global $user, $base_url;
 
+  $core = _h5p_get_instance('core');
+  // Enable reporting features if Drupal Quiz module is active or and LRS
+  $enableReportingFeatures = (module_exists('quiz') && module_exists('quiz_h5p')) ||
+                             $core->h5pF->getOption('enable_lrs_content_types');
   $settings = array(
     'baseUrl' => $base_url,
     'url' => base_path() . _h5p_get_h5p_path(),
     'postUserStatistics' =>  $user->uid > 0,
-    'ajaxPath' => url('h5p-ajax') . '/',
     'ajax' => array(
-      'contentUserData' => str_replace('%3A', ':', url('h5p-ajax/content-user-data/:contentId/:dataType/:subContentId'))
+      'setFinished' => url('h5p-ajax/set-finished.json', array('query' => array('token' => \H5PCore::createToken('result')))),
+      'contentUserData' => str_replace('%3A', ':', url('h5p-ajax/content-user-data/:contentId/:dataType/:subContentId', array('query' => array('token' => \H5PCore::createToken('contentuserdata')))))
     ),
     'saveFreq' => variable_get('h5p_save_content_state', 0) ? variable_get('h5p_save_content_frequency', 30) : FALSE,
     'l10n' => array(
-      'H5P' => array( // Could core provide this?
-        'fullscreen' => t('Fullscreen'),
-        'disableFullscreen' => t('Disable fullscreen'),
-        'download' => t('Download'),
-        'copyrights' => t('Rights of use'),
-        'embed' => t('Embed'),
-        'size' => t('Size'),
-        'showAdvanced' => t('Show advanced'),
-        'hideAdvanced' => t('Hide advanced'),
-        'advancedHelp' => t('Include this script on your website if you want dynamic sizing of the embedded content:'),
-        'copyrightInformation' => t('Rights of use'),
-        'close' => t('Close'),
-        'title' => t('Title'),
-        'author' => t('Author'),
-        'year' => t('Year'),
-        'source' => t('Source'),
-        'license' => t('License'),
-        'thumbnail' => t('Thumbnail'),
-        'noCopyrights' => t('No copyright information available for this content.'),
-        'downloadDescription' => t('Download this content as a H5P file.'),
-        'copyrightsDescription' => t('View copyright information for this content.'),
-        'embedDescription' => t('View the embed code for this content.'),
-        'h5pDescription' => t('Visit H5P.org to check out more cool content.'),
-        'contentChanged' => t('This content has changed since you last used it.'),
-        'startingOver' => t("You'll be starting over.")
-      )
-    )
+      'H5P' => $core->getLocalization()
+    ),
+    'hubIsEnabled' => variable_get('h5p_hub_is_enabled', TRUE) ? TRUE : FALSE,
+    'reportingIsEnabled' => $enableReportingFeatures,
+    'crossorigin' => variable_get('h5p_crossorigin', NULL),
+    'libraryConfig' => $core->h5pF->getLibraryConfig(),
+    'pluginCacheBuster' => '?' . variable_get('css_js_query_string', ''),
+    'libraryUrl' => url(drupal_get_path('module', 'h5p') . '/library/js')
   );
 
   if ($user->uid) {
@@ -727,16 +890,20 @@ function h5p_get_core_settings() {
       'mail' => $user->mail
     );
   }
+  else {
+    $settings['siteUrl'] = url('<front>', array('absolute' => TRUE));
+  }
 
   return $settings;
 }
 
 function h5p_get_content($node) {
   $core = _h5p_get_instance('core');
-  $node->disable |= $core->getGlobalDisable();
-  if (!($node->disable & H5PCore::DISABLE_FRAME) && !variable_get('h5p_icon_in_action_bar', TRUE)) {
-    $node->disable |= H5PCore::DISABLE_ABOUT;
+
+  if (isset($node->in_preview)) {
+    return array();
   }
+
   return array(
     'id' => h5p_get_content_id($node),
     'mainId' => $node->nid,
@@ -746,8 +913,10 @@ function h5p_get_content($node) {
     'library' => $node->main_library,
     'embedType' => 'div',
     'filtered' => $node->filtered,
-    'url' => url('node/' . $node->nid, array('absolute' => TRUE)),
-    'disable' => $node->disable,
+    'url' => url('node/' . $node->nid, array('absolute' => TRUE, 'alias' => TRUE)),
+    'displayOptions' => $core->getDisplayOptionsForView($node->disable, $node->nid),
+    'slug' => $node->h5p_slug,
+    'metadata' => $node->metadata
   );
 }
 
@@ -782,7 +951,12 @@ function h5p_get_content_settings($content) {
                         ':content_id' => $content['mainId']
   ));
 
-  $content_user_data = array();
+  $content_user_data = array(
+    0 => array(
+      'state' => '{}'
+    )
+  );
+
   foreach ($results as $result) {
     $content_user_data[$result->sub_content_id][$result->data_id] = $result->data;
   }
@@ -791,14 +965,14 @@ function h5p_get_content_settings($content) {
     'library' => H5PCore::libraryToString($content['library']),
     'jsonContent' => $filtered,
     'fullScreen' => $content['library']['fullscreen'],
-    'exportUrl' => h5p_get_export_path($content['id']),
+    'exportUrl' => h5p_get_export_path($content),
     'embedCode' => '<iframe src="' . url('h5p/embed/' . $content['mainId'], array('absolute' => TRUE)) . '" width=":w" height=":h" frameborder="0" allowfullscreen="allowfullscreen"></iframe>',
-    'resizeCode' => '<script src="' . h5p_get_resize_url() . '"></script>',
+    'resizeCode' => '<script src="' . h5p_get_resize_url() . '" charset="UTF-8"></script>',
     'mainId' => $content['mainId'],
     'url' => $content['url'],
-    'title' => $content['title'],
     'contentUserData' => $content_user_data,
-    'disable' => $content['disable']
+    'displayOptions' => $content['displayOptions'],
+    'metadata' => $content['metadata']
   );
 }
 
@@ -869,6 +1043,16 @@ function h5p_add_files_and_settings($node, $embed_type) {
 }
 
 /**
+ * Checks to see if the path is external.
+ *
+ * @param string $path
+ * @return bool
+ */
+function h5p_is_external_asset($path) {
+  return preg_match('/^[a-z0-9]+:\/\//i', $path) ? TRUE : FALSE;
+}
+
+/**
  * Add the necessary assets for content to run in an iframe.
  *
  * @param array $integration
@@ -899,15 +1083,23 @@ function h5p_add_iframe_assets(&$integration, $content_id, $files) {
   if ($is_writable && $preprocess_css) {
     // Refactor styles array to Drupal eatable format.
     $styles = array();
+    // Filters out external styles
+    $external_styles = array();
     foreach ($files['styles'] as $style) {
+      if (h5p_is_external_asset($style->path)) {
+        $external_styles[] = $style;
+      }
+      else {
+        // Aggregate
       $styles[] = array(
         'data' => $style->path,
         'type' => 'file'
       );
     }
+    }
 
-    $css_url = file_create_url(drupal_build_css_cache($styles));
-    $integration['contents']['cid-' . $content_id]['styles'] = array($css_url);
+    $integration['contents']['cid-' . $content_id]['styles'] = $core->getAssetsUrls($external_styles);
+    $integration['contents']['cid-' . $content_id]['styles'][] = file_create_url(drupal_build_css_cache($styles));
   }
   else {
     $integration['contents']['cid-' . $content_id]['styles'] = $core->getAssetsUrls($files['styles']);
@@ -916,16 +1108,24 @@ function h5p_add_iframe_assets(&$integration, $content_id, $files) {
   if ($is_writable && $preprocess_js) {
     // Refactor scripts array to Drupal eatable format.
     $scripts = array();
+    // Filters out external scripts
+    $external_scripts = array();
     foreach ($files['scripts'] as $script) {
+      if (h5p_is_external_asset($script->path)) {
+        $external_scripts[] = $script;
+      }
+      else {
+        // Aggregate
       $scripts[$script->path] = array(
         'data' => $script->path,
         'type' => 'file',
         'preprocess' => TRUE,
       );
     }
+    }
 
-    $js_url = file_create_url(drupal_build_js_cache($scripts));
-    $integration['contents']['cid-' . $content_id]['scripts'] = array($js_url);
+    $integration['contents']['cid-' . $content_id]['scripts'] = $core->getAssetsUrls($external_scripts);
+    $integration['contents']['cid-' . $content_id]['scripts'][] = file_create_url(drupal_build_js_cache($scripts));
   }
   else {
     $integration['contents']['cid-' . $content_id]['scripts'] = $core->getAssetsUrls($files['scripts']);
@@ -977,7 +1177,7 @@ function _h5p_maintain_session_variables() {
  *  Core functions and storage in the h5p library
  * @param string $type
  *  Specifies the instance to be returned; validator, storage, interface or core
- * @return object
+ * @return H5PDrupal|H5PValidator|H5PStorage|H5PContentValidator|H5PExport|H5PCore
  *  The instance og h5p specified by type
  */
 function _h5p_get_instance($type) {
@@ -986,26 +1186,29 @@ function _h5p_get_instance($type) {
 
   if (!isset($interface)) {
     $interface = new H5PDrupal();
+    $fs = new \H5PDefaultStorage(_h5p_get_h5p_path(), file_stream_wrapper_get_instance_by_uri('public://')->getDirectoryPath() . DIRECTORY_SEPARATOR . 'h5peditor');
+    $core = new H5PCore($interface, $fs, base_path(), $language->language, (variable_get('h5p_export', '1') ? TRUE : FALSE));
 
-    $development_mode = H5PDevelopment::MODE_NONE;
+    // Override regex for converting copied files paths
+    $core->relativePathRegExp = '/^((\.\.\/){1,3})(.*content\/)?(\d+|h5peditor)\/(.+)$/';
+
 //    if (variable_get('h5p_content_dev_mode', '0') === 1) {
-//      $development_mode |= H5PDevelopment::MODE_CONTENT;
+//      $core->development_mode |= H5PDevelopment::MODE_CONTENT;
 //      drupal_set_message(t('H5P content development mode is enabled. Change <a href="@settings-page">settings</a>.', array('@settings-page' => url('admin/config/system/h5p'))), 'warning', FALSE);
 //    }
     if (variable_get('h5p_library_development', 0) === 1) {
-      $development_mode |= H5PDevelopment::MODE_LIBRARY;
-      $preprocess_css_or_js = variable_get('preprocess_css', 0) === '1' || variable_get('preprocess_js', 0) === '1';
+      $core->development_mode |= H5PDevelopment::MODE_LIBRARY;
+      $core->h5pD = new H5PDevelopment($interface, _h5p_get_h5p_path() . '/', $language->language);
 
       $message = t('H5P library development directory is enabled. Change <a href="@settings-page">settings</a>.', array('@settings-page' => url('admin/config/system/h5p')));
 
+      $preprocess_css_or_js = variable_get('preprocess_css', 0) === '1' || variable_get('preprocess_js', 0) === '1';
       if ($preprocess_css_or_js) {
         $message .= '<br/>' . t('Preprocessing of css and/or js files is enabled. This is not supported when using the development directory option. Please disable preprocessing, and clear the cache');
       }
 
       drupal_set_message($message, 'warning', FALSE);
     }
-
-    $core = new H5PCore($interface, _h5p_get_h5p_path(), base_path(), $language->language, (variable_get('h5p_export', '1') ? TRUE : FALSE), $development_mode);
   }
 
   switch ($type) {
@@ -1149,7 +1352,6 @@ function h5p_access_user_points($account = NULL) {
 
 /**
  * Handles insert, updating and deleteing content user data through AJAX.
- * TODO: Use token to prevent false deletion of data?
  *
  * @param string $content_id
  * @param string $data_id
@@ -1174,6 +1376,10 @@ function h5p_content_user_data($content_id, $data_id, $sub_content_id) {
   $preload = filter_input(INPUT_POST, 'preload');
   $invalidate = filter_input(INPUT_POST, 'invalidate');
   if ($data !== NULL && $preload !== NULL && $invalidate !== NULL) {
+    if (!H5PCore::validToken('contentuserdata', filter_input(INPUT_GET, 'token'))) {
+      return H5PCore::ajaxError(t('Invalid security token.'));
+    }
+
     if ($data === '0') {
       // Remove data
       db_delete('h5p_content_user_data')
@@ -1233,6 +1439,8 @@ function h5p_content_user_data($content_id, $data_id, $sub_content_id) {
           ->execute();
       }
     }
+
+    return H5PCore::ajaxSuccess();
   }
   else {
     // Fetch data
@@ -1257,20 +1465,18 @@ function h5p_content_user_data($content_id, $data_id, $sub_content_id) {
 /**
  * Generate embed page to be included in iframe.
  */
-function h5p_embed($node) {
+function h5p_embed($nid = NULL) {
   global $language;
 
-  $callback = filter_input(INPUT_GET, 'callback');
-  if ($callback !== NULL) {
-
-    // Old embed code only returns resizer url
-    print $callback . '(\'' . h5p_get_resize_url() . '\');';
-    return;
+  if (empty($nid)) {
+    drupal_not_found();
+    exit;
   }
 
-  $node = node_load($node);
+  $module_path = base_path() . drupal_get_path('module', 'h5p');
+  $node = node_load($nid);
   if (!$node || !node_access('view', $node) || !isset($node->json_content)) {
-    print '<body style="margin:0"><div style="background: #fafafa url(http://h5p.org/sites/all/themes/professional_themec/images/h5p.svg) no-repeat center;background-size: 50% 50%;width: 100%;height: 100%;"></div><div style="width:100%;position:absolute;top:75%;text-align:center;color:#434343;font-family: Consolas,monaco,monospace">' . t('Content unavailable.') . '</div></body>';
+    print '<body style="margin:0"><div style="background: #fafafa url(' . $module_path . '/library/images/h5p.svg) no-repeat center;background-size: 50% 50%;width: 100%;height: 100%;"></div><div style="width:100%;position:absolute;top:75%;text-align:center;color:#434343;font-family: Consolas,monaco,monospace">' . t('Content unavailable.') . '</div></body>';
     return;
   }
 
@@ -1280,8 +1486,6 @@ function h5p_embed($node) {
   $settings = h5p_get_core_settings();
   // TODO: The non-content specific settings could be apart of a combined
   // h5p-core.js file to avoid sending the same data multiple times.
-
-  $module_path = base_path() . drupal_get_path('module', 'h5p');
 
   // Get core scripts
   $scripts = array();
@@ -1318,6 +1522,9 @@ function h5p_embed($node) {
   $styles = array_merge($styles, $core->getAssetsUrls($files['styles']));
 
   $lang = $language->language;
+  // allow for appending output to this page
+  $content['head'] = '';
+  drupal_alter('embedded_h5p', $content['head'], $node);
   include('library/embed.php');
 }
 
@@ -1349,4 +1556,32 @@ function _h5p_dependencies_to_library_list($dependencies) {
     );
   }
   return $library_list;
+}
+
+/**
+ * Implements
+ */
+function h5p_views_pre_view($view, $display_id, $args) {
+  if ($view->name === 'node_results' && $display_id === 'page' && $view->base_field === 'nid') {
+    $node = node_load($view->args[0]);
+    if ($node && isset($node->main_library)) {
+      // Log view of results page
+      new H5PEvent('results', 'content',
+        $node->nid,
+        $node->title,
+        $node->main_library['name'],
+        $node->main_library['majorVersion'] . '.' . $node->main_library['minorVersion']
+      );
+    }
+  }
+}
+
+/**
+ * Checks if the variable has changed before setting it.
+ * This is to avoid performance costly mistakes.
+ */
+function h5p_variable_set($name, $value) {
+  if (variable_get($name) !== $value) {
+    variable_set($name, $value);
+  }
 }

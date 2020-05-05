@@ -6,7 +6,17 @@
  * This demonstrates some ways you can implement the CIS connect
  * API using real use cases from the original site instance at
  * penn state.
+ *
+ * _cis_connector_assemble_entity_list allows for a quick way of pulling together
+ * a well structured entityfieldquery without having to write it every time.
+ * There's a special array position for __role which allows filtering user
+ * entities by role.
  */
+
+// to debug non-blocking calls, add the following variable or config to settings.php
+// variable_set('cis_devel_nonblock', TRUE);
+// or, much better, put this in your settings.php file
+// $config['cis_devel_nonblock'] = TRUE;
 
 /**
  * Implements hook_cis_service_registry().
@@ -32,6 +42,7 @@ function hook_cis_service_registry() {
     // this example is from how CIS uses this
     'cis' => array(// Course Information System distribution
       'protocol' => 'https',// base protocol for address calls; commonly https or http
+      'service_protocol' => 'http', // optional base protocol for backend web service calls. This scenario would be that your internal calls reroute local anyway via /etc/hosts rewrite and therefore don't need encryption. This is not common but still possible.
       'service_address' => 'data.online.example.com',// address to make calls over, this can be the same as address but for added security an alternate domain is recommended
       'address' => 'online.example.com',// address to connect to for CIS data
       'user' => 'SERVICE_CIS_YZ',// special user account with HTTP authentication access
@@ -40,6 +51,7 @@ function hook_cis_service_registry() {
       'instance' => FALSE,// if this is a per instance distro or single system
       'default_title' => 'Course Information System',// default title
       'ignore' => TRUE,// optional: if this should be ignored when aligning with the registry
+      'custom' => FALSE,// optional: only used if this is a custom property that's technically in the keychain for your own purposes but is to be ignored by critical sync systems like ECD
     ),
     // this example is from how MOOC would use this
     'mooc' => array(

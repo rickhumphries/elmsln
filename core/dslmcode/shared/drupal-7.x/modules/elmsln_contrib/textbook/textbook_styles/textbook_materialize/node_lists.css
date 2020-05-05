@@ -1,0 +1,102 @@
+/*
+  Textbook Style Guide
+*/
+
+/* Required list template */
+.textbook_box {
+  display: block;
+  margin: 1rem 0px 2rem 0px;
+  padding: .5em;
+}
+.textbook_box h3 {
+  font-size: 1.5em;
+  font-weight: bold;
+  display: block;
+  float: right;
+  margin-top: -.7rem !important;
+  margin-right: -.7rem;
+  margin-bottom: .5rem;
+  margin-left: 0;
+  padding: 0 0 .5rem .5rem;
+  background-color: #ffffff;
+  border-bottom: .1rem solid;
+  border-left: .1rem solid;
+  letter-spacing: .06em;
+  line-height: 1;
+}
+.textbook_box_required {
+  border:#ff5252 .1rem solid;
+}
+.textbook_box_required h3{
+  color:#ff5252;
+}
+.textbook_box_required li:before{
+  background: #ff5252;
+}
+/* Optional list color shift */
+.textbook_box_optional {
+  border:#1b526d 2px solid;
+}
+.textbook_box_optional h3{
+  color: #1b526d;
+}
+.textbook_box_optional li:before{
+  background: #1b526d;
+}
+
+.textbook_box ol, .textbook_box ul{
+  counter-reset: li; /* Initiate a counter */
+  list-style: none; /* Remove default numbering */
+  *list-style: decimal; /* Keep using default numbering for IE6/7 */
+  padding: 0px 0px 0px 14px;
+  margin: 30px 20px 20px;
+  text-shadow: 0 1px 0 rgba(255,255,255,.5);
+}
+
+.textbook_box li{
+  position: relative;
+  display: block;
+  padding: .4rem .4rem .4rem 2rem;
+  margin: .7rem 0 !important;
+  background: #eee;
+  color: #000000;
+  text-decoration: none;
+  transition: all .3s ease-out;
+  overflow-wrap: break-word;
+}
+
+.textbook_box li:hover{
+  background: #e0e0e0;
+}
+
+.textbook_box li:before{
+  content: counter(li);
+  counter-increment: li;
+  position: absolute;
+  left: -1rem;
+  top: 55%;
+  margin-top: -1.25rem;
+  height: 2.3rem;
+  width: 2.3rem;
+  line-height: 2.3rem;
+  text-align: center;
+  font-weight: bold;
+  -moz-border-radius: 2rem;
+  -webkit-border-radius: 2rem;
+  border-radius: 2rem; /* future proofing */
+  -khtml-border-radius: 2rem; /* for old Konqueror browsers */
+  transition: all .3s ease-out;
+  font-size: 1.4rem;
+}
+
+/* Responsive */
+@media screen and (max-width: 80rem) {
+  .textbook_box h3 {
+    float: none;
+    margin: 0;
+    padding: 1rem 1rem 0;
+    border:none;
+    background-color: transparent;
+    line-height: 1;
+  }
+}

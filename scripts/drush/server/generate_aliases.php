@@ -1,41 +1,22 @@
 <?php
+require_once '/var/www/elmsln/core/dslmcode/elmsln_environment/elmsln_environment.php';
+
 /**
  * Automatically find and create drush aliases on the server.
  * @param  array $aliases  array of drush aliases
  */
 function _elmsln_alises_build_server(&$aliases, &$authorities = array()) {
+  global $elmslncfg;
   // static cache assembled aliases as this can get tripped often
   static $pulledaliases = array();
   static $pulledauthorities = array();
+  static $config = array();
   // check for pervasive cache if static is empty
   if (empty($pulledaliases)) {
     // assumption here is that it lives where we expect
     // change this line if that's not the case though we really don't
     // support changes to that part of the install routine
-    $cfg = file_get_contents('/var/www/elmsln/config/scripts/drush-create-site/config.cfg');
-    $lines = explode("\n", $cfg);
-    $config = array();
-    // read each line of the config file
-    foreach ($lines as $line) {
-      // make sure this line isn't a comment and has a = in it
-      if (strpos($line, '#') !== 0 && strpos($line, '=')) {
-        $tmp = explode('=', $line);
-        // ensure we have 2 settings before doing this
-        if (count($tmp) == 2) {
-          // never pass around the dbsu
-          if (!in_array($tmp[0], array('dbsu', 'dbsupw'))) {
-            // strip encapsulation if it exists
-            $config[$tmp[0]] = str_replace('"', '', str_replace("'", '', $tmp[1]));
-          }
-        }
-      }
-    }
-    // support the fact that $elmsln is used to reference in many bash vars
-    foreach ($config as $key => $value) {
-      if (strpos($value, '$elmsln') !== FALSE) {
-        $config[$key] = str_replace('$elmsln', $config['elmsln'], $value);
-      }
-    }
+    $config = $elmslncfg;
     // base address of all domains
     $address = $config['address'];
     // your web root
@@ -54,7 +35,7 @@ function _elmsln_alises_build_server(&$aliases, &$authorities = array()) {
     // loop through known stacks
     foreach ($stacks as $stack) {
       // step through sites directory assuming it isn't the 'default'
-      if ($stack != 'default') {
+      if ($stack != 'default' && is_dir("$root$stack/sites/$stack")) {
         try {
           $stackdir = new DirectoryIterator("$root$stack/sites/$stack");
           while ($stackdir->valid()) {
@@ -71,28 +52,32 @@ function _elmsln_alises_build_server(&$aliases, &$authorities = array()) {
                 );
 
                 // step through sites directory
-                $site = new DirectoryIterator("$root$stack/sites/$stack/$group");
-                while ($site->valid()) {
-                  // Look for directories containing a 'settings.php' file
-                  if ($site->isDir() && !$site->isDot() && !$site->isLink()) {
-                    if (file_exists($site->getPathname() . '/settings.php')) {
-                      // Add site alias
-                      $basename = $site->getBasename();
-                      $pulledaliases["$stack.$basename"] = array(
-                        'root' => $root . $stack,
-                        'uri' => "$stack.$address.$basename",
-                      );
+                if (is_dir("$root$stack/sites/$stack/$group")) {
+                  $site = new DirectoryIterator("$root$stack/sites/$stack/$group");
+                  while ($site->valid()) {
+                    // Look for directories containing a 'settings.php' file
+                    if ($site->isDir() && !$site->isDot() && !$site->isLink()) {
+                      if (file_exists($site->getPathname() . '/settings.php')) {
+                        // Add site alias
+                        $basename = $site->getBasename();
+                        // test that this isn't actually something like coursename = host
+                        if ($basename == $config['host'] && !is_dir("$root$stack/sites/$stack/$group/$group")) {
+                          $pulledaliases["$stack.$basename"] = array(
+                            'root' => $root . $stack,
+                            'uri' => "$stack.$address",
+                          );
+                        }
+                        else {
+                          $pulledaliases["$stack.$basename"] = array(
+                            'root' => $root . $stack,
+                            'uri' => "$stack.$address.$basename",
+                          );
+                        }
+                      }
                     }
+                    $site->next();
                   }
-                  $site->next();
                 }
-              }
-              // account for stacks that function more like CIS
-              if (file_exists("$root$stack/sites/$stack/$group/settings.php")) {
-                $pulledaliases["$stack.$group"] = array(
-                  'root' => $root . $stack,
-                  'uri' => "$stack.$address",
-                );
               }
             }
             $stackdir->next();
@@ -105,4 +90,5 @@ function _elmsln_alises_build_server(&$aliases, &$authorities = array()) {
   }
   $aliases = $pulledaliases;
   $authorities = $pulledauthorities;
+  return $config;
 }
